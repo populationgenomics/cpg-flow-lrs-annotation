@@ -29,7 +29,7 @@ def annotate_dataset_mt(mt_path: str, out_mt_path: str):
     logger.info('Annotating genotypes')
     mt = mt.annotate_rows(genotypes=hl.agg.collect(hl.struct(**genotype_fields)))
 
-    def _genotype_filter_samples(fn) -> hl.Set:
+    def _genotype_filter_samples(fn):  # noqa: ANN202
         """Filter on the genotypes."""
         return hl.set(mt.genotypes.filter(fn).map(lambda g: g.sample_id))
 
@@ -53,11 +53,11 @@ def annotate_dataset_mt(mt_path: str, out_mt_path: str):
     #   that captures the value of i.
 
     # top level - decorator
-    def _capture_i_decorator(func) -> callable:
+    def _capture_i_decorator(func):  # noqa: ANN202
         """Call the returned_function(i) which locks in the value of i"""
-        def _inner_filter(i) -> callable:
+        def _inner_filter(i):  # noqa: ANN202
             """The _genotype_filter_samples will call this _func with g"""
-            def _func(g) -> bool:
+            def _func(g):  # noqa: ANN202
                 """The actual filter function that will be called with g"""
                 return func(i, g)
 
@@ -79,12 +79,12 @@ def annotate_dataset_mt(mt_path: str, out_mt_path: str):
 
     mt = mt.annotate_rows(
         samples_no_call=_genotype_filter_samples(lambda g: g.num_alt == -1),
-        samples_num_alt=hl.struct(**{('%i' % i): _genotype_filter_samples(_filter_num_alt(i)) for i in range(1, 3, 1)}),  # noqa: UP031
+        samples_num_alt=hl.struct(**{('%i' % i): _genotype_filter_samples(_filter_num_alt(i)) for i in range(1, 3, 1)}),
         samples_gq=hl.struct(
-            **{('%i_to_%i' % (i, i + 5)): _genotype_filter_samples(_filter_samples_gq(i)) for i in range(0, 95, 5)},  # noqa: UP031
+            **{('%i_to_%i' % (i, i + 5)): _genotype_filter_samples(_filter_samples_gq(i)) for i in range(0, 95, 5)},
         ),
         samples_ab=hl.struct(
-            **{'%i_to_%i' % (i, i + 5): _genotype_filter_samples(_filter_samples_ab(i)) for i in range(0, 45, 5)},  # noqa: UP031
+            **{'%i_to_%i' % (i, i + 5): _genotype_filter_samples(_filter_samples_ab(i)) for i in range(0, 45, 5)},
         ),
     )
     mt.describe()

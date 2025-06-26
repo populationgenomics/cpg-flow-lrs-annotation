@@ -68,7 +68,6 @@ def add_vep_jobs(
             vep_results_paths=result_part_paths,
             out_path=out_path,
             job_attrs=job_attrs,
-            depends_on=jobs,
         )
         gather_jobs = [j]
     elif scatter_count != 1:
