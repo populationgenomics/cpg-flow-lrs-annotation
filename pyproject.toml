@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 # TODO(you): update this to reflect the project's name & description
-name='workflow_name'
-description='Template workflow'
+name='lrs_annotation'
+description='A pipeline for creating annotated callsets containing SNPs and indels from long-read sequencing data'
 readme = "README.md"
 # currently cpg-flow is pinned to this version
 requires-python = ">=3.10,<3.11"
@@ -22,12 +22,12 @@ classifiers=[
 ]
 
 dependencies=[
-    'cpg-flow>=v0.1.2',
+    'cpg-flow>=v0.2.1',
 ]
 
 [project.urls]
 # TODO(you): update this to reflect the project's official homepage
-Repository = "https://github.com/populationgenomics/workflow_name"
+Repository = "https://github.com/populationgenomics/cpg-flow-lrs-annotation"
 
 [project.optional-dependencies]
 # various requirements when running cpg-flow/analysis-runner
@@ -47,10 +47,10 @@ test = [
 # >> Hello, World!
 # $ say_hello cpg-flow
 # >> Hello, cpg-flow!
-say_hello = 'workflow_name.scripts.hello_world:cli_main'
+say_hello = 'lrs_annotation.scripts.hello_world:cli_main'
 
 # the workflow runner script - entrypoint for the pipeline
-run_workflow = 'workflow_name.run_workflow:cli_main'
+run_workflow = 'lrs_annotation.run_workflow:cli_main'
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -59,7 +59,7 @@ package-dir = {"" = "src"}
 include_package_data = true
 
 [options.package_data]
-'workflow_name'=  ['config_template.toml']
+'lrs_annotation'=  ['lrs_annotation.toml']
 
 [tool.black]
 line-length = 120
@@ -116,3 +116,8 @@ ignore = [
 
 [tool.ruff.lint.isort]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.per-file-ignores]
+# suppress the ARG002 "Unused method argument" warning in the stages.py file
+## - we don't need generic cpg-flow arguments for every Stage, but need to fit the required method signature
+"src/lrs_annotation/snps_indels_annotation_stages.py" = ["ARG002"]

@@ -1,0 +1,54 @@
+from hailtop.batch.job import Job
+
+from cpg_utils import Path
+from cpg_utils.config import get_config, image_path
+from cpg_utils.hail_batch import get_batch
+
+from lrs_annotation.scripts import annotate_dataset_mt
+from lrs_annotation.scripts import subset_mt_to_sgs
+
+
+def annotate_dataset_jobs(
+    mt_path: Path,
+    sequencing_group_ids: list[str],
+    out_mt_path: Path,
+    tmp_prefix: Path,
+    job_attrs: dict | None = None,
+    depends_on: list[Job] | None = None,
+) -> list[Job]:
+    """
+    Split mt by dataset and annotate dataset-specific fields (only for those datasets
+    that will be loaded into Seqr).
+    """
+    sample_ids_list_path = tmp_prefix / 'sample-list.txt'
+    if not get_config()['workflow'].get('dry_run', False):
+        with sample_ids_list_path.open('w') as f:
+            f.write(','.join(sequencing_group_ids))
+
+    subset_mt_path = tmp_prefix / 'cohort-subset.mt'
+
+    subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
+    subset_j.image(image_path('cpg_workflows'))
+    assert sequencing_group_ids
+    subset_j.command(
+        f"""
+        python3 {subset_mt_to_sgs.__file__} \\
+            --mt_path {mt_path} \\
+            --sg_ids {','.join(sequencing_group_ids)} \\
+            --out_mt_path {subset_mt_path}
+        """
+    )
+    if depends_on:
+        subset_j.depends_on(*depends_on)
+
+    annotate_j = get_batch().new_job('Annotate dataset', (job_attrs or {}) | {'tool': 'hail query'})
+    annotate_j.image(image_path('cpg_workflows'))
+    annotate_j.command(
+        f"""
+        python3 {annotate_dataset_mt.__file__} \\
+            --mt_path {subset_mt_path} \\
+            --out_mt_path {out_mt_path}
+        """
+    )
+    annotate_j.depends_on(subset_j)
+    return [subset_j, annotate_j]

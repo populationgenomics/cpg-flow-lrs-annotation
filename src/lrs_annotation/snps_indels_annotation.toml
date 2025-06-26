@@ -1,0 +1,21 @@
+[workflow]
+name = 'snps_indels_annotation'
+
+check_inputs = true
+check_intermediates = true
+check_expected_outputs = true
+
+sequencing_type = 'genome'
+status_reporter = 'metamist'
+
+input_cohorts = []
+
+[workflow.lrs_annotation]
+variant_types = ['SNV']
+variant_callers = ['deeptrio', 'deepvariant']
+pipeface_versions = ['v0.6.1']
+
+[workflow.lrs_annotation.resource_overrides.merge_job]
+# cpu = 4
+# memory = '16Gi'
+# storage = '50Gi'
