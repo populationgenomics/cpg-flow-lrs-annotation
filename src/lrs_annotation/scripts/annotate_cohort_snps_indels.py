@@ -9,7 +9,7 @@ import hail as hl
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import genome_build
 from cpg_flow.utils import checkpoint_hail
-from hail_scripts.computed_fields import variant_id, vep
+from lrs_annotation.hail_scripts import variant_id, vep
 
 
 def annotate_cohort(
