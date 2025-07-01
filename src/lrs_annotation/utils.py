@@ -16,25 +16,29 @@ DATE_STRING: str = datetime.now().strftime('%y-%m-%d')  # noqa: DTZ005
 
 VCF_QUERY = gql(
     """
-    query MyQuery($dataset: String!) {
-  project(name: $dataset) {
-    sequencingGroups {
-      id
-      analyses(type: {eq: "pacbio_vcf"}) {
-        meta
-        output
-        outputs
+    query MyQuery($dataset: String!, $seqTypes: [String!], $analysisType: String!, $metaFilter: JSON) {
+      project(name: $dataset) {
+        sequencingGroups(type: {in_: $seqTypes}, technology: {eq: "long-read"}) {
+          id
+          type
+          technology
+          platform
+          analyses(type: {eq: $analysisType}, meta: {filter: $metaFilter}) {
+            meta
+            output
+            outputs
+          }
+        }
       }
     }
-  }
-}""",
+    """,
 )
 
 LRS_IDS_QUERY = gql(
     """
-    query MyQuery($dataset: String!) {
+    query MyQuery($dataset: String!, $seqTypes: [String!]) {
     project(name: $dataset) {
-      sequencingGroups(technology: {eq: "long-read"}, type: {eq: "genome"}) {
+      sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}) {
           id
           sample {
             externalId
@@ -50,6 +54,7 @@ LRS_IDS_QUERY = gql(
     """,
 )
 
+
 def get_config_options_as_tuple(field_name: str) -> tuple[str] | None:
     """
     Get a tuple of values from the config, for use with cached functions
@@ -62,6 +67,7 @@ def get_config_options_as_tuple(field_name: str) -> tuple[str] | None:
             values = (values,)
         return tuple(values)
     return None
+
 
 def get_intervals_from_bed(intervals_path: Path) -> list[str]:
     """
@@ -77,6 +83,7 @@ def get_intervals_from_bed(intervals_path: Path) -> list[str]:
             chrom, start, end = line.strip().split('\t')
             intervals.append(f'{chrom}:{int(start)+1}-{end}')
     return intervals
+
 
 def joint_calling_scatter_count(sequencing_group_count: int) -> int:
     """
@@ -102,6 +109,7 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
         if sequencing_group_count >= threshold:
             return scatter_count
     return 50
+
 
 def write_mapping_to_file(mapping: dict[str, str], output_file: Path) -> None:
     """
@@ -146,12 +154,15 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
             sgs_to_skip.add(sg_id)
     return sgs_to_skip
 
+
 @cache
 def query_for_lrs_vcfs(
     dataset_name: str,
+    sequencing_types: tuple[str],
     variant_types: tuple[str],
     variant_callers: tuple[str] | None,
     pipeface_versions: tuple[str] | None,
+    joint_called: bool = False,
     verbose: bool = False,
 ) -> dict[str, dict]:
     """
@@ -162,49 +173,67 @@ def query_for_lrs_vcfs(
 
     Args:
         dataset_name (str): the name of the dataset
+        sequencing_types (tuple[str]): allowed sequencing types, e.g. ('genome', 'adaptive_sampling')
         variant_types (tuple[str] | None): allowed variant types, e.g. ('SNV', 'SV')
         variant_callers: (tuple[str] | None): allowed variant callers, e.g. ('deeptrio', 'sniffles')
         pipeface_versions (tuple[str] | None): allowed pipeface versions, e.g. ('v0.6.1', 'v0.7.0')
+        joint_called (bool): whether to look for and preference joint-called VCFs
         verbose (bool): whether to print skipped VCFs to the log
 
     Returns:
         a dictionary of the SG IDs and their corresponding VCFs
     """
     single_sample_vcfs: dict[str, dict] = {}
-    joint_called_vcfs: dict[str, dict] = {}
-    analysis_results = query(VCF_QUERY, variables={'dataset': dataset_name})
-    for sg in analysis_results['project']['sequencingGroups']:
+
+    meta_filter = {
+        'variant_type': {'in_': variant_types} if variant_types else None,
+        'caller': {'in_': variant_callers} if variant_callers else None,
+        'pipeface_version': {'in_': pipeface_versions} if pipeface_versions else None,
+        'joint_called': False,
+    }
+    single_sample_vcfs_query_results = query(
+        VCF_QUERY,
+        variables={
+            'dataset': dataset_name,
+            'seqTypes': sequencing_types,
+            'analysisType': 'variant_calling',
+            'metaFilter': meta_filter,
+        },
+    )
+    for sg in single_sample_vcfs_query_results['project']['sequencingGroups']:
         for analysis in sg['analyses']:
-            if analysis['meta'].get('variant_type', 'unkown') not in variant_types:
-                continue
-            if pipeface_versions and analysis['meta'].get('pipeface_version', 'unkown') not in pipeface_versions:
-                if verbose:
-                    logger.info(
-                        (
-                            f'Skipping {analysis["output"]} for {sg["id"]} '
-                            f'as it is not an allowed pipeface version: {pipeface_versions}',
-                        ),
-                    )
-                continue
-            if variant_callers and analysis['meta'].get('caller', 'unkown') not in variant_callers:
-                if verbose:
-                    logger.info(
-                        (
-                            f'Skipping {analysis["output"]} for {sg["id"]} '
-                            f'as it is not an allowed caller: {variant_callers}'
-                        ),
-                    )
-                continue
-            if analysis['meta'].get('joint_called', False):
-                joint_called_vcfs[sg['id']] = {
-                    'output': analysis['output'],
-                    'meta': analysis['meta'],
-                }
-            else:
-                single_sample_vcfs[sg['id']] = {
-                    'output': analysis['output'],
-                    'meta': analysis['meta'],
-                }
+            single_sample_vcfs[sg['id']] = {
+                'output': analysis['output'],
+                'meta': analysis['meta'],
+            }
+
+    if not joint_called:
+        return single_sample_vcfs
+
+    # If joint_called is True, we need to query for the joint-called VCFs
+    # And prefer them over the single-sample VCFs
+    if verbose:
+        logger.info(
+            f'Finding {variant_types} joint-called VCFs in {dataset_name} for sequencing types: {sequencing_types},'
+            f' callers: {variant_callers}, pipeface versions: {pipeface_versions}',
+        )
+    joint_called_vcfs: dict[str, dict] = {}
+    meta_filter['joint_called'] = True
+    joint_called_vcfs_query_results = query(
+        VCF_QUERY,
+        variables={
+            'dataset': dataset_name,
+            'seqTypes': sequencing_types,
+            'analysisType': 'joint_variant_calling',
+            'metaFilter': meta_filter
+        },
+    )
+    for sg in joint_called_vcfs_query_results['project']['sequencingGroups']:
+        for analysis in sg['analyses']:
+            joint_called_vcfs[sg['id']] = {
+                'output': analysis['output'],
+                'meta': analysis['meta'],
+            }
 
     # Prefer the joint-called VCFs over the single-sample VCFs
     sg_vcfs = {}
