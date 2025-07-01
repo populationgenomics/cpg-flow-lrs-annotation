@@ -8,12 +8,17 @@ check_expected_outputs = true
 sequencing_type = 'genome'
 status_reporter = 'metamist'
 
-input_cohorts = []
+input_cohorts = [
+    # ghfm-kidgen-test
+    'COH6143',
+]
 
 [workflow.lrs_annotation]
-variant_types = ['SNV']
-variant_callers = ['deeptrio', 'deepvariant']
-pipeface_versions = ['v0.6.1']
+sequencing_types = [ 'genome', 'adaptive_sampling', ]
+variant_types = [ 'SNV', 'snp_indel', ]
+variant_callers = [ 'deeptrio', 'deepvariant', ]
+pipeface_versions = [ 'v0.8.0', ]
+joint_called = false
 
 [workflow.lrs_annotation.resource_overrides.merge_job]
 # cpu = 4

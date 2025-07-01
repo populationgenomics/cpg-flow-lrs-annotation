@@ -100,9 +100,11 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         """
         sg_vcfs = query_for_lrs_vcfs(
             dataset_name=sg.dataset.name,
+            sequencing_types=get_config_options_as_tuple('sequencing_types'),
             variant_types=get_config_options_as_tuple('variant_types'),
             variant_callers=get_config_options_as_tuple('variant_callers'),
             pipeface_versions=get_config_options_as_tuple('pipeface_versions'),
+            joint_called=config_retrieve(['workflow', 'lrs_annotation', 'joint_called'], default=False),
             verbose=config_retrieve(['workflow', 'lrs_annotation', 'verbose'], default=False),
         )
         if sg.id not in sg_vcfs:
