@@ -8,11 +8,6 @@ check_expected_outputs = true
 sequencing_type = 'genome'
 status_reporter = 'metamist'
 
-input_cohorts = [
-    # ghfm-kidgen-test
-    'COH6143',
-]
-
 [workflow.lrs_annotation]
 sequencing_types = [ 'genome', 'adaptive_sampling', ]
 variant_types = [ 'SNV', 'snp_indel', ]
