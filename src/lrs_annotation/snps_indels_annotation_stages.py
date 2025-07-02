@@ -52,7 +52,7 @@ from utils import (
 
 from google.api_core.exceptions import PermissionDenied
 
-@stage
+@stage.stage
 class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
     """
     Write the LRS ID to SG ID mapping to a file
@@ -78,7 +78,7 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=output)
 
 
-@stage(required_stages=[WriteLrsIdToSgIdMappingFile])
+@stage.stage(required_stages=[WriteLrsIdToSgIdMappingFile])
 class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
     """
     Take each of the long-read SNPs Indels VCFs, and re-format the contents
@@ -152,7 +152,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
-@stage(required_stages=ReformatSnpsIndelsVcfWithBcftools)
+@stage.stage(required_stages=ReformatSnpsIndelsVcfWithBcftools)
 class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
     """
     Find all the reformatted VCFs and merge them together with bcftools
@@ -218,7 +218,7 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage(required_stages=[ReformatSnpsIndelsVcfWithBcftools, MergeReformattedSnpsIndelsVcfsWithBcftools])
+@stage.stage(required_stages=[ReformatSnpsIndelsVcfWithBcftools, MergeReformattedSnpsIndelsVcfsWithBcftools])
 class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
     """
     Get the site-only VCFs from the merged VCF by splitting the VCF with GATK SelectVariants,
@@ -273,7 +273,7 @@ class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=jobs)
 
 
-@stage(required_stages=[SplitMergedVcfIntoSitesOnlyVcfsWithGatk])
+@stage.stage(required_stages=[SplitMergedVcfIntoSitesOnlyVcfsWithGatk])
 class VepLongReadAnnotation(stage.MultiCohortStage):
     """
     Run VEP on the long-read site-only VCFs and write out a Hail table.
@@ -313,7 +313,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         return self.make_outputs(multicohort, outputs, jobs)
 
 
-@stage(required_stages=[
+@stage.stage(required_stages=[
     ReformatSnpsIndelsVcfWithBcftools,
     MergeReformattedSnpsIndelsVcfsWithBcftools,
     VepLongReadAnnotation]
@@ -353,7 +353,7 @@ class AnnotateCohortLongReadSnpsIndelsWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage(required_stages=[AnnotateCohortLongReadSnpsIndelsWithHail], analysis_type='custom', analysis_keys=['mt'])
+@stage.stage(required_stages=[AnnotateCohortLongReadSnpsIndelsWithHail], analysis_type='custom', analysis_keys=['mt'])
 class SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the MT to be this Dataset only
@@ -394,7 +394,7 @@ class SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail(stage.DatasetSta
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
-@stage(
+@stage.stage(
     required_stages=[SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail],
     analysis_type='es-index',
     analysis_keys=['index_name'],
