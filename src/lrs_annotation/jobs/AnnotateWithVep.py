@@ -5,7 +5,7 @@ from hailtop.batch.job import Job
 from textwrap import dedent
 from typing import Literal
 from lrs_annotation.scripts import vep_json_to_ht
-from GatherVcfs import gather_vcfs
+from lrs_annotation.jobs.GatherVcfs import gather_vcfs
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, reference_path
