@@ -29,12 +29,12 @@ def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
             f'All callset SG IDs: {mt_sg_ids}',
         )
 
-    logger(f'Found {len(mt_sg_ids)} samples in mt, subsetting to {len(unique_sg_ids)} samples.')
+    logger.info(f'Found {len(mt_sg_ids)} samples in mt, subsetting to {len(unique_sg_ids)} samples.')
 
     mt = mt.filter_cols(hl.literal(unique_sg_ids).contains(mt.s))
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
     mt.write(out_mt_path, overwrite=True)
-    logger(f'Finished subsetting to {len(unique_sg_ids)} samples, written to {out_mt_path}.')
+    logger.info(f'Finished subsetting to {len(unique_sg_ids)} samples, written to {out_mt_path}.')
 
 def cli_main():
     """
