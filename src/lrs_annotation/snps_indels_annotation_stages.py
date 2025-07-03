@@ -40,6 +40,7 @@ from jobs.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_si
 from jobs.AnnotateWithVep import add_vep_jobs
 from jobs.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.AnnotateDatasetMatrixtable import annotate_dataset_jobs
+from jobs.MergeVcfs import merge_snps_indels_vcf_with_bcftools
 from jobs.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
 
 from utils import (
@@ -156,42 +157,15 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
             logger.info('Only one VCF found, skipping merge')
             return None
 
-        batch_vcfs = [
-            get_batch().read_input_group(**{'vcf.gz': each_vcf, 'vcf.gz.tbi': f'{each_vcf}.tbi'})['vcf.gz']
-            for each_vcf in [
-                str(reformatted_vcfs.get(sgid, {}).get('vcf'))
-                for sgid in multicohort.get_sequencing_group_ids()
-                if sgid in reformatted_vcfs
-            ]
+        vcf_paths = [
+            str(reformatted_vcfs[sgid]['vcf'])
+            for sgid in multicohort.get_sequencing_group_ids()
+            if sgid in reformatted_vcfs
         ]
 
-        merge_job = get_batch().new_job('Merge Long-Read SNPs Indels calls', attributes={'tool': 'bcftools'})
-        merge_job.image(image=image_path('bcftools_121'))
-
-        merge_job_resources = config_retrieve(
-            ['workflow', 'lrs_annotation', 'resource_overrides', 'merge_job'],
-            default={
-                'cpu': 4,
-                'memory': '16Gi',
-                'storage': '50Gi',
-            }
-        )
-        merge_job.cpu(merge_job_resources['cpu'])
-        merge_job.memory(merge_job_resources['memory'])
-        merge_job.storage(merge_job_resources['storage'])
-        merge_job.declare_resource_group(output={'vcf.bgz': '{root}.vcf.bgz', 'vcf.bgz.tbi': '{root}.vcf.bgz.tbi'})
-
-        # BCFtools options breakdown:
-        #   --threads: number of threads to use
-        #   -m: merge strategy (none means multiple records for multiallelic sites)
-        #   -0: assume genotypes at missing sites are 0/0
-        #   -Oz: bgzip output (compressed VCF)
-        #   -o: output file name
-        #   --write-index: write index file (only for bcftools 1.18+. Occasionally bugged for < 1.21)
-        #   +fill-tags: plugin to compute and fill in the INFO tags (AF, AN, AC)
-        merge_job.command(
-            f'bcftools merge {" ".join(batch_vcfs)} --threads 4 -m none -0 | '
-            f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.bgz"]} --write-index=tbi -- -t AF,AN,AC'
+        merge_job = merge_snps_indels_vcf_with_bcftools(
+            batch=get_batch(),
+            vcf_paths=vcf_paths,
         )
 
         outputs = self.expected_outputs(multicohort)
