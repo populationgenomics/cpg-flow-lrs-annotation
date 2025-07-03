@@ -235,13 +235,18 @@ def query_for_lrs_vcfs(
     Returns:
         a dictionary of the SG IDs and their corresponding VCFs
     """
+    if verbose:
+        logger.info(
+            f'{dataset_name} :: Finding {variant_types} single-sample VCFs in for sequencing types: {sequencing_types},'
+            f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
+        )
     single_sample_vcfs: dict[str, dict] = {}
 
     meta_filter = {
         'variant_type': {'in_': variant_types} if variant_types else None,
         'caller': {'in_': variant_callers} if variant_callers else None,
         'pipeface_version': {'in_': pipeface_versions} if pipeface_versions else None,
-        'joint_called': False,
+        'joint_called': {'eq': False},
     }
     single_sample_vcfs_query_results = query(
         VCF_QUERY,
