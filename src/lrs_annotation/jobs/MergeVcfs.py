@@ -6,6 +6,7 @@ from lrs_annotation.utils import get_resource_overrides_for_job
 def merge_snps_indels_vcf_with_bcftools(
     batch: Batch,
     vcf_paths: str,
+    job_attrs: dict | None = None,
 ):
     """
     Reformat SNPs and Indels VCFs using bcftools.
@@ -16,7 +17,7 @@ def merge_snps_indels_vcf_with_bcftools(
         for each_vcf in vcf_paths
     ]
 
-    merge_job = batch.new_job('Merge Long-Read SNPs Indels calls', attributes={'tool': 'bcftools'})
+    merge_job = batch.new_job('Merge Long-Read SNPs Indels calls', attributes=job_attrs)
     merge_job.image(image=config_retrieve(['images', 'bcftools_121']))
 
     resource_overrides = get_resource_overrides_for_job('merge_snps_indels_vcfs')

@@ -26,7 +26,7 @@ Workflow for finding long-read SNPs_Indels files, updating file contents, mergin
 from loguru import logger
 
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve, image_path
+from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
 from cpg_flow import stage, targets
@@ -36,12 +36,14 @@ from cpg_flow.workflow import (
     get_workflow,
 )
 
-from jobs.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
-from jobs.AnnotateWithVep import add_vep_jobs
 from jobs.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.AnnotateDatasetMatrixtable import annotate_dataset_jobs
+from jobs.AnnotateWithVep import add_vep_jobs
+from jobs.ExportMtToElastic import export_snps_indels_mt_to_elastic
 from jobs.MergeVcfs import merge_snps_indels_vcf_with_bcftools
 from jobs.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
+from jobs.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
+
 
 from utils import (
     get_config_options_as_tuple,
@@ -166,6 +168,7 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
         merge_job = merge_snps_indels_vcf_with_bcftools(
             batch=get_batch(),
             vcf_paths=vcf_paths,
+            job_attrs={'tool': 'bcftools'},
         )
 
         outputs = self.expected_outputs(multicohort)
@@ -395,25 +398,26 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
         mt_path = str(
             inputs.as_path(target=dataset, stage=SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail, key='mt')
         )
-        # and just the name, used after localisation
-        mt_name = mt_path.split('/')[-1]
 
         # get the expected outputs as Strings
         index_name = str(outputs['index_name'])
         flag_name = str(outputs['done_flag'])
+        # and just the name, used after localisation
+        mt_name = mt_path.split('/')[-1]
 
-        job = get_batch().new_job(f'Generate {index_name} from {mt_path}')
         req_storage = tshirt_mt_sizing(
             sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
             cohort_size=len(dataset.get_sequencing_group_ids()),
         )
         # set all job attributes in one bash
-        job.cpu(4).memory('lowmem').storage(f'{req_storage}Gi').image(config_retrieve(['workflow', 'driver_image']))
-
-        # localise the MT
-        job.command(f'gcloud --no-user-output-enabled storage cp -r {mt_path} $BATCH_TMPDIR')
-
-        # run the export from the localised MT - this job writes no new data, just transforms and exports over network
-        job.command(f'mt_to_es --mt_path "${{BATCH_TMPDIR}}/{mt_name}" --index {index_name} --flag {flag_name}')
+        job = export_snps_indels_mt_to_elastic(
+            batch=get_batch(),
+            mt_path=mt_path,
+            index_name=index_name,
+            flag_name=flag_name,
+            req_storage=req_storage,
+            job_name=f'Export {index_name} from {mt_name}',
+            job_attrs=self.get_job_attrs(dataset),
+        )
 
         return self.make_outputs(dataset, data=outputs['index_name'], jobs=job)
