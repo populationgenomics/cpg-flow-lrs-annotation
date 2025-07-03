@@ -22,6 +22,7 @@ avoid relying on them downstream
 """
 from argparse import ArgumentParser
 import hail as hl
+from cpg_utils.hail_batch import init_batch
 
 
 def vep_json_to_ht(vep_results_paths: list[str], out_path, vep_version: str):
@@ -30,6 +31,7 @@ def vep_json_to_ht(vep_results_paths: list[str], out_path, vep_version: str):
     and write into a Hail Table.
     receives a vep_version str to determine how data is decoded
     """
+    init_batch()
 
     # check against supported versions
     assert vep_version in ['105', '110']

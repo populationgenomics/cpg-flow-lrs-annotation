@@ -2,6 +2,7 @@ import hail as hl
 from argparse import ArgumentParser
 
 from loguru import logger
+from cpg_utils.hail_batch import init_batch
 
 
 def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
@@ -14,6 +15,7 @@ def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
         sg_ids (list[str]): sgs to take from the matrix table.
         out_mt_path (str): path to write the result.
     """
+    init_batch()
     mt = hl.read_matrix_table(mt_path)
 
     unique_sg_ids: set[str] = set(sg_ids)

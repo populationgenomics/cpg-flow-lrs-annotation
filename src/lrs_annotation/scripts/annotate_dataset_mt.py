@@ -2,12 +2,14 @@ import hail as hl
 from argparse import ArgumentParser
 
 from loguru import logger
+from cpg_utils.hail_batch import init_batch
 
 
 def annotate_dataset_mt(mt_path: str, out_mt_path: str):
     """
     Add dataset-level annotations.
     """
+    init_batch()
     mt = hl.read_matrix_table(mt_path)
 
     # Convert the mt genotype entries into num_alt, gq, ab, dp, and sample_id.
