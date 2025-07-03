@@ -237,7 +237,7 @@ def query_for_lrs_vcfs(
     """
     if verbose:
         logger.info(
-            f'{dataset_name} :: Finding {variant_types} single-sample VCFs in for sequencing types: {sequencing_types},'
+            f'{dataset_name} :: Finding {variant_types} single-sample VCFs for sequencing types: {sequencing_types},'
             f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
         )
     single_sample_vcfs: dict[str, dict] = {}
@@ -263,7 +263,10 @@ def query_for_lrs_vcfs(
                 'output': analysis['output'],
                 'meta': analysis['meta'],
             }
-
+    if verbose:
+        logger.info(
+            f'{dataset_name} :: Found {len(single_sample_vcfs)} single-sample VCFs.',
+        )
     if not joint_called:
         return single_sample_vcfs
 
@@ -275,13 +278,13 @@ def query_for_lrs_vcfs(
             f' callers: {variant_callers}, pipeface versions: {pipeface_versions}',
         )
     joint_called_vcfs: dict[str, dict] = {}
-    meta_filter['joint_called'] = True
+    meta_filter['joint_called'] = {'eq': True}
     joint_called_vcfs_query_results = query(
         VCF_QUERY,
         variables={
             'dataset': dataset_name,
             'seqTypes': sequencing_types,
-            'analysisType': 'joint_variant_calling',
+            'analysisType': analysis_types,
             'metaFilter': meta_filter
         },
     )
