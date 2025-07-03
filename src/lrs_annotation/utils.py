@@ -103,7 +103,7 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
     Number of partitions for joint-calling jobs (GenotypeGVCFs, VQSR, VEP),
     as a function of the sequencing group number.
     """
-    if scatter_count := config_retrieve(['workflow', 'scatter_count']):
+    if scatter_count := config_retrieve(['workflow', 'scatter_count'], default=None):
         return scatter_count
 
     # Estimating this is challenging because GenotypeGVCFs does not scale
