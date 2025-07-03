@@ -69,6 +69,17 @@ def get_config_options_as_tuple(field_name: str) -> tuple[str] | None:
     return None
 
 
+def get_resource_overrides_for_job(job_name: str) -> dict[str, str | int]:
+    """
+    Get the resource overrides for a job from the config.
+    Returns a dictionary of resource overrides, e.g. {'storage_gb': 10, 'cores': 4}
+    """
+    overrides = config_retrieve(['workflow', 'resource_overrides', job_name], {})
+    if not isinstance(overrides, dict):
+        raise ValueError(f'Expected a dictionary for resource overrides for {job_name}, got {overrides}')
+    return overrides
+
+
 def get_intervals_from_bed(intervals_path: Path) -> list[str]:
     """
     Read genomic intervals from a bed file.
@@ -115,9 +126,9 @@ def write_mapping_to_file(mapping: dict[str, str], output_file: Path) -> None:
     """
     Write a mapping to a file
     """
-    with open(output_file, 'w') as f:
-        for key, value in mapping.items():
-            f.write(f'{key}\t{value}\n')
+    with output_file.open('w') as f:
+        for k, v in mapping.items():
+            f.write(f'{k} {v}\n')
 
 
 def es_password() -> str:

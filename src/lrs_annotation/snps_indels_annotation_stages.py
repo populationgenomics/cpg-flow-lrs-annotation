@@ -40,6 +40,7 @@ from jobs.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_si
 from jobs.AnnotateWithVep import add_vep_jobs
 from jobs.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.AnnotateDatasetMatrixtable import annotate_dataset_jobs
+from jobs.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
 
 from utils import (
     get_config_options_as_tuple,
@@ -114,37 +115,18 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
 
         # Input VCF
         sg_vcf: str = sg_vcfs[sg.id]['output']
-        local_vcf = get_batch().read_input(sg_vcf)
 
         # Required file for reheadering
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sgid_mapping')
-        local_id_mapping = get_batch().read_input(lrs_sg_id_mapping)
-
-        # Required file for normalisation
-        ref_fasta = config_retrieve(['workflow', 'ref_fasta'])
-        fasta = get_batch().read_input_group(**{'fa': ref_fasta, 'fa.fai': f'{ref_fasta}.fai'})['fa']
 
         # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
-        reformatting_job = get_batch().new_job(
-            f'Reheadering, Normalising, BGZipping, and Indexing for {sg.id}: '
-            f'{"joint-called " if joint_called else ""}{sg_vcf}',
-            {'tool': 'bcftools'},
+        reformatting_job = reformat_snps_indels_vcf_with_bcftools(
+            batch=get_batch(),
+            job_name=f'Reformatting SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{sg_vcf}',
+            job_attrs={'tool': 'bcftools'},
+            vcf_path=sg_vcf,
+            lrs_sg_id_mapping_path=lrs_sg_id_mapping,
         )
-        reformatting_job.declare_resource_group(
-            vcf_out={'vcf.bgz': '{root}.vcf.bgz', 'vcf.bgz.tbi': '{root}.vcf.bgz.tbi'}
-        )
-        reformatting_job.image(image=image_path('bcftools'))
-        reformatting_job.storage('10Gi')
-        reformatting_job.command(
-            f'bcftools view -Ov {local_vcf} | bcftools reheader --samples {local_id_mapping} '
-            f'-o {reformatting_job.reheadered}',
-        )
-        # Normalise, sort, bgzip, and index the VCF
-        reformatting_job.command(
-            f'bcftools norm -m -any -f {fasta} -c s {reformatting_job.reheadered} | '
-            f'bcftools sort | bgzip -c > {reformatting_job.vcf_out["vcf.bgz"]}',
-        )
-        reformatting_job.command(f'tabix {reformatting_job.vcf_out["vcf.bgz"]}')
 
         outputs = self.expected_outputs(sg)
         get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.bgz'))
