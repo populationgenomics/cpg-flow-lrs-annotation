@@ -318,14 +318,14 @@ def query_for_lrs_vcfs(
     return return_dict
 
 
-def query_for_lrs_to_sg_id_and_sex_mapping(datasets: list[str]):
+def query_for_lrs_to_sg_id_and_sex_mapping(datasets: list[str], seq_types: list[str]):
     """
     Query metamist for the LRS ID corresponding to each sequencing group ID, and to its participant's sex
     """
     lrs_sgid_mapping = {}
     lrs_id_sex_mapping = {}
     for dataset in datasets:
-        query_results = query(LRS_IDS_QUERY, variables={'dataset': dataset})
+        query_results = query(LRS_IDS_QUERY, variables={'dataset': dataset, 'seqTypes': seq_types})
         for sg in query_results['project']['sequencingGroups']:
             sample = sg['sample']
             participant = sample['participant']
