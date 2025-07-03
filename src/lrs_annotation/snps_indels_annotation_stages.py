@@ -102,8 +102,9 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
+        test = config_retrieve(['workflow', 'access_level']) == 'test'
         sg_vcfs = query_for_lrs_vcfs(
-            dataset_name=sg.dataset.name,
+            dataset_name=sg.dataset.name + '-test' if test else sg.dataset.name,
             sequencing_types=get_config_options_as_tuple('sequencing_types'),
             analysis_types=get_config_options_as_tuple('analysis_types'),
             variant_types=get_config_options_as_tuple('variant_types'),
