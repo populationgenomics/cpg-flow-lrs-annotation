@@ -4,7 +4,7 @@ from hailtop.batch.job import Job
 
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path
-from cpg_utils.config import config_retrieve, image_path, reference_path
+from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import command
 
 def get_intervals(
@@ -62,8 +62,9 @@ def get_intervals(
         f'Make {scatter_count} intervals for {sequencing_type}',
         attributes=(job_attrs or {}) | {'tool': 'picard IntervalListTools'},
     )
-    j.image(image_path('picard'))
-    STANDARD.set_resources(j, storage_gb=16, mem_gb=2)
+    j.image(config_retrieve(['images', 'picard']))
+    j.storage('16Gi')
+    j.memory('2Gi')
 
     break_bands_at_multiples_of = {
         'genome': 100000,
