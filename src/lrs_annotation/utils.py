@@ -202,7 +202,7 @@ def parse_init_batch_args(init_batch_args: str | None) -> dict[str, str | int]:
     args = {}
     for arg in init_batch_args.split(','):
         key, value = arg.split('=')
-        args[key.strip()] = value.strip().strip('"')
+        args[key.strip()] = value.strip().strip("'")
     return args
 
 
