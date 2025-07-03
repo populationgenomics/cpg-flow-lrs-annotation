@@ -1,7 +1,7 @@
 from hailtop.batch.job import Job
 
 from cpg_utils import Path
-from cpg_utils.config import get_config, image_path
+from cpg_utils.config import config_retrieve, image_path
 from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.scripts import annotate_dataset_mt
@@ -21,14 +21,14 @@ def annotate_dataset_jobs(
     that will be loaded into Seqr).
     """
     sample_ids_list_path = tmp_prefix / 'sample-list.txt'
-    if not get_config()['workflow'].get('dry_run', False):
+    if not config_retrieve(['workflow', 'dry_run'], default=False):
         with sample_ids_list_path.open('w') as f:
             f.write(','.join(sequencing_group_ids))
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 
     subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
-    subset_j.image(image_path('cpg_workflows'))
+    subset_j.image(config_retrieve(['workflow', 'driver_image']))
     assert sequencing_group_ids
     subset_j.command(
         f"""
@@ -42,7 +42,7 @@ def annotate_dataset_jobs(
         subset_j.depends_on(*depends_on)
 
     annotate_j = get_batch().new_job('Annotate dataset', (job_attrs or {}) | {'tool': 'hail query'})
-    annotate_j.image(image_path('cpg_workflows'))
+    annotate_j.image(config_retrieve(['workflow', 'driver_image']))
     annotate_j.command(
         f"""
         python3 {annotate_dataset_mt.__file__} \\
