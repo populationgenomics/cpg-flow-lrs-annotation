@@ -10,6 +10,7 @@ status_reporter = 'metamist'
 
 [workflow.lrs_annotation]
 sequencing_types = [ 'genome', 'adaptive_sampling', ]
+analysis_types = [ 'vcf', 'pacbio_vcf',]
 variant_types = [ 'SNV', 'snp_indel', ]
 variant_callers = [ 'deeptrio', 'deepvariant', ]
 pipeface_versions = [ 'v0.8.0', ]

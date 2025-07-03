@@ -105,6 +105,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         sg_vcfs = query_for_lrs_vcfs(
             dataset_name=sg.dataset.name,
             sequencing_types=get_config_options_as_tuple('sequencing_types'),
+            analysis_types=get_config_options_as_tuple('analysis_types'),
             variant_types=get_config_options_as_tuple('variant_types'),
             variant_callers=get_config_options_as_tuple('variant_callers'),
             pipeface_versions=get_config_options_as_tuple('pipeface_versions'),

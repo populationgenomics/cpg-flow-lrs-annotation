@@ -16,14 +16,16 @@ DATE_STRING: str = datetime.now().strftime('%y-%m-%d')  # noqa: DTZ005
 
 VCF_QUERY = gql(
     """
-    query MyQuery($dataset: String!, $seqTypes: [String!], $analysisType: String!, $metaFilter: JSON) {
+    query MyQuery($dataset: String!, $seqTypes: [String!], $analysisTypes: [String!], $metaFilter: JSON) {
       project(name: $dataset) {
         sequencingGroups(type: {in_: $seqTypes}, technology: {eq: "long-read"}) {
           id
           type
           technology
           platform
-          analyses(type: {eq: $analysisType}, meta: {filter: $metaFilter}) {
+          analyses(type: {in_: $analysisTypes}, meta: {filter: $metaFilter}) {
+            id
+            type
             meta
             output
             outputs
@@ -208,6 +210,7 @@ def parse_init_batch_args(init_batch_args: str | None) -> dict[str, str | int]:
 def query_for_lrs_vcfs(
     dataset_name: str,
     sequencing_types: tuple[str],
+    analysis_types: tuple[str],
     variant_types: tuple[str],
     variant_callers: tuple[str] | None,
     pipeface_versions: tuple[str] | None,
@@ -245,7 +248,7 @@ def query_for_lrs_vcfs(
         variables={
             'dataset': dataset_name,
             'seqTypes': sequencing_types,
-            'analysisType': 'variant_calling',
+            'analysisTypes': analysis_types,
             'metaFilter': meta_filter,
         },
     )
