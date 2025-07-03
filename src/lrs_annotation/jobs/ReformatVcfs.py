@@ -26,7 +26,7 @@ def reformat_snps_indels_vcf_with_bcftools(
     reformatting_job.declare_resource_group(
         vcf_out={'vcf.bgz': '{root}.vcf.bgz', 'vcf.bgz.tbi': '{root}.vcf.bgz.tbi'}
     )
-    reformatting_job.image(image=config_retrieve['images', 'bcftools'])
+    reformatting_job.image(image=config_retrieve(['images', 'bcftools']))
 
     resource_overrides = get_resource_overrides_for_job('reformat_snps_indels_vcf')
 

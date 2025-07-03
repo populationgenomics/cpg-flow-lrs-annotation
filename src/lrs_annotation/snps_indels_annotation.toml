@@ -8,13 +8,17 @@ check_expected_outputs = true
 sequencing_type = 'genome'
 status_reporter = 'metamist'
 
+ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
+
 [workflow.lrs_annotation]
-sequencing_types = [ 'genome', 'adaptive_sampling', ]
-analysis_types = [ 'vcf', 'pacbio_vcf',]
-variant_types = [ 'SNV', 'snp_indel', ]
-variant_callers = [ 'deeptrio', 'deepvariant', ]
-pipeface_versions = [ 'v0.8.0', ]
-joint_called = false
+# sequencing_types = [ 'genome', 'adaptive_sampling', ]
+# analysis_types = [ 'vcf', 'pacbio_vcf',]
+# variant_types = [ 'SNV', 'snp_indel', ]
+# variant_callers = [ 'deeptrio', 'deepvariant', ]
+# pipeface_versions = [ 'v0.8.0', ]
+# joint_called = false
+
+
 
 [workflow.lrs_annotation.resource_overrides.merge_job]
 # cpu = 4
