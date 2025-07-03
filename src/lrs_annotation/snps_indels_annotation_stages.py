@@ -94,7 +94,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.prefix() / 'pacbio' / 'modified_vcfs'
+        sgid_prefix = sequencing_group.dataset.prefix() / 'long_read' / 'reformatted_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.bgz',
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.bgz.tbi',
