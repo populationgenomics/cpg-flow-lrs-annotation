@@ -74,7 +74,10 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         """
         output = self.expected_outputs(multicohort)
 
-        lrs_sgid_mapping, _ = query_for_lrs_to_sg_id_and_sex_mapping([d.name for d in multicohort.get_datasets()])
+        test = config_retrieve(['workflow', 'access_level']) == 'test'
+        datasets = [d.name + '-test' if test else d.name for d in multicohort.get_datasets()]
+
+        lrs_sgid_mapping, _ = query_for_lrs_to_sg_id_and_sex_mapping(datasets)
         mapping_file_path = self.prefix / 'lrs_sgid_mapping.txt'
         logger.info(f'Writing LRS ID to SG ID mapping to {mapping_file_path}')
         write_mapping_to_file(lrs_sgid_mapping, mapping_file_path)
