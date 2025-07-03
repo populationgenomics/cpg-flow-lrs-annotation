@@ -178,6 +178,12 @@ def cli_main():
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to the output Matrix Table file')
     parser.add_argument('--vep_ht_path', type=str, required=True, help='Path to the VEP Hail Table file')
     parser.add_argument('--checkpoint_prefix', type=str, default=None, help='Prefix for checkpoint files')
+    parser.add_argument(
+        '--init_batch_args',
+        type=str,
+        default=None,
+        help='Arguments to pass to init_batch, e.g. --init_batch_args "worker_memory=highmem"',
+    )
     parser.add_argument('--remove_invalid_contigs', action='store_true', default=False,
                         help='Whether to remove invalid contigs from the Matrix Table')
 
@@ -188,6 +194,7 @@ def cli_main():
         out_mt_path=args.out_mt_path,
         vep_ht_path=args.vep_ht_path,
         checkpoint_prefix=args.checkpoint_prefix,
+        init_batch_args=args.init_batch_args,
         remove_invalid_contigs=args.remove_invalid_contigs,
     )
 
