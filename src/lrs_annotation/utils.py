@@ -23,7 +23,7 @@ VCF_QUERY = gql(
           type
           technology
           platform
-          analyses(type: {in_: $analysisTypes}, meta: {filter: $metaFilter}) {
+          analyses(type: {in_: $analysisTypes}, meta: $metaFilter) {
             id
             type
             meta
