@@ -155,6 +155,44 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     return sgs_to_skip
 
 
+def get_init_batch_args_for_job(job_name: str) -> str:
+    """
+    Finds init_batch args for a particular job from the config.
+
+    Converts the dict into a string of key value pairs so it can be passed to the batch job
+    via the command line.
+    e.g. {'worker_memory': 'highmem'} -> 'init_batch(worker_memory="highmem")'
+    """
+    init_batch_args: dict[str, str | int] = {}
+    workflow_config = config_retrieve(['workflow', job_name], {})
+
+    # Memory parameters
+    for config_key, batch_key in [('highmem_workers', 'worker_memory'), ('highmem_drivers', 'driver_memory')]:
+        if workflow_config.get(config_key):
+            init_batch_args[batch_key] = 'highmem'
+    # Cores parameter
+    for key in ['driver_cores', 'worker_cores']:
+        if workflow_config.get(key):
+            init_batch_args[key] = workflow_config[key]
+
+    # translate any input arguments into an embeddable String
+    return ', '.join(f'{k}={v!r}' for k, v in init_batch_args.items()) if init_batch_args else ''
+
+
+def parse_init_batch_args(init_batch_args: str | None) -> dict[str, str | int]:
+    """
+    Parse the init_batch_args string into a dictionary.
+    e.g. 'worker_memory="highmem", driver_memory="highmem"' -> {'worker_memory': 'highmem', 'driver_memory': 'highmem'}
+    """
+    if not init_batch_args:
+        return {}
+    args = {}
+    for arg in init_batch_args.split(','):
+        key, value = arg.split('=')
+        args[key.strip()] = value.strip().strip('"')
+    return args
+
+
 @cache
 def query_for_lrs_vcfs(
     dataset_name: str,

@@ -7,9 +7,10 @@ import logging
 import hail as hl
 
 from cpg_utils.config import config_retrieve, reference_path
-from cpg_utils.hail_batch import genome_build
+from cpg_utils.hail_batch import genome_build, init_batch
 from cpg_flow.utils import checkpoint_hail
 from lrs_annotation.hail_scripts import variant_id, vep
+from lrs_annotation.utils import parse_init_batch_args
 
 
 def annotate_cohort(
@@ -17,12 +18,15 @@ def annotate_cohort(
     out_mt_path: str,
     vep_ht_path: str,
     checkpoint_prefix: str | None = None,
+    init_batch_args: str | None = None,
     remove_invalid_contigs: bool = False,
 ):
     """
     Convert VCF to matrix table, annotate for Seqr Loader, add VEP and VQSR
     annotations.
     """
+    init_batch(**parse_init_batch_args(init_batch_args))
+
     # tune the logger correctly
     logging.getLogger().setLevel(logging.INFO)
 

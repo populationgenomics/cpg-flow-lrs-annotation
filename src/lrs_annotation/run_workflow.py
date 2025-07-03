@@ -22,6 +22,7 @@ def cli_main():
     """
     parser = ArgumentParser()
     parser.add_argument('--dry_run', action='store_true', help='Dry run')
+    parser.add_argument('--workflow', type=str, choices=['snps_indels', 'svs'], default='snps_indels')
     args = parser.parse_args()
 
     # Note - in production-pipelines the main.py script sets up layers of default configuration,
@@ -31,6 +32,8 @@ def cli_main():
     # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
 
+    if args.workflow == 'svs':
+        raise NotImplementedError("SVs workflow is not implemented yet")
     stages = [ExportLongReadSnpsIndelsMtToElasticIndex]
 
     run_workflow(stages=stages, dry_run=args.dry_run)
