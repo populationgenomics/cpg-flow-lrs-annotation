@@ -24,7 +24,7 @@ from argparse import ArgumentParser
 import hail as hl
 
 
-def vep_json_to_ht(vep_result_paths: list[str], out_path, vep_version: str):
+def vep_json_to_ht(vep_results_paths: list[str], out_path, vep_version: str):
     """
     Parse results from VEP with annotations formatted in JSON,
     and write into a Hail Table.
@@ -352,7 +352,7 @@ def vep_json_to_ht(vep_result_paths: list[str], out_path, vep_version: str):
     else:
         raise AssertionError(f'VEP version {vep_version} not supported')
 
-    ht = hl.import_table(paths=vep_result_paths, no_header=True, types={'f0': json_schema})
+    ht = hl.import_table(paths=vep_results_paths, no_header=True, types={'f0': json_schema})
     ht = ht.transmute(vep=ht.f0)
     # Can't use ht.vep.start for start because it can be modified by VEP (e.g. it
     # happens for indels). So instead parsing POS from the original VCF line stored
