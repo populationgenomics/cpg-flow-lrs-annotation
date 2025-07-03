@@ -371,7 +371,7 @@ def cli_main():
     """
 
     parser = ArgumentParser()
-    parser.add_argument('--vep_result_paths', type=str, nargs='+',
+    parser.add_argument('--vep_results_paths', type=str, nargs='+',
                         help='Paths to VEP result files in JSON format')
     parser.add_argument('--out_path', type=str, required=True,
                         help='Output path for the Hail Table')
@@ -380,7 +380,7 @@ def cli_main():
 
     args = parser.parse_args()
 
-    vep_json_to_ht(vep_result_paths=args.vep_result_paths,
+    vep_json_to_ht(vep_results_paths=args.vep_results_paths,
                    out_path=args.out_path,
                    vep_version=args.vep_version)
 
