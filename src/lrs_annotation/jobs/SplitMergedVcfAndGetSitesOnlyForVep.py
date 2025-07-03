@@ -171,7 +171,7 @@ def add_make_sitesonly_job(
     job_attrs = (job_attrs or {}) | {'tool': 'gatk MakeSitesOnlyVcf'}
     j = b.new_job(job_name, job_attrs)
     j.image(config_retrieve(['images', 'gatk']))
-    res = STANDARD.set_resources(j, ncpu=2)
+    res = STANDARD.set_resources(j=j, ncpu=2)
     if storage_gb:
         j.storage(f'{storage_gb}G')
     j.declare_resource_group(output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'})
