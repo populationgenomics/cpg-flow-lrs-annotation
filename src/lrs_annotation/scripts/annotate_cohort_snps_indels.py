@@ -73,6 +73,9 @@ def annotate_cohort(
     if 'PL' in mt.entry:
         logging.info('Removing PL field from entry fields')
         mt = mt.drop('PL')
+    if 'AD' in mt.entry:
+        logging.info('Removing AD field from entry fields')
+        mt = mt.drop('AD')
     mt = hl.split_multi_hts(mt.annotate_rows(locus_old=mt.locus, alleles_old=mt.alleles))
     mt = checkpoint_hail(mt, 'mt-vep-split.mt', checkpoint_prefix)
 
