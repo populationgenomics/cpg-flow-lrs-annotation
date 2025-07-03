@@ -271,7 +271,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
             job_attrs=self.get_job_attrs(),
             scatter_count=scatter_count,
         )
-        return self.make_outputs(multicohort, outputs, jobs)
+        return self.make_outputs(multicohort, data=outputs, jobs=jobs)
 
 
 @stage.stage(required_stages=[
