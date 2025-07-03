@@ -18,7 +18,7 @@ def merge_snps_indels_vcf_with_bcftools(
     ]
 
     merge_job = batch.new_job('Merge Long-Read SNPs Indels calls', attributes=job_attrs)
-    merge_job.image(image=config_retrieve(['images', 'bcftools']))
+    merge_job.image(image=config_retrieve(['images', 'bcftools_121']))
 
     resource_overrides = get_resource_overrides_for_job('merge_snps_indels_vcfs')
 
