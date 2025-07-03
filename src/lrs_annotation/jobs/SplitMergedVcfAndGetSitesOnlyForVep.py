@@ -120,7 +120,7 @@ def add_split_vcf_job(
     """
     j = b.new_job('SplitVcf', (job_attrs or {}) | {'tool': 'gatk SelectVariants'})
     j.image(config_retrieve(['images', 'gatk']))
-    res = STANDARD.set_resources(j, ncpu=2)
+    res = STANDARD.set_resources(j=j, ncpu=2)
 
     for idx, interval in enumerate(intervals):
         output_vcf_path = output_vcf_paths[idx]
