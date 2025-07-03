@@ -48,9 +48,11 @@ def cli_main():
 
     args = parser.parse_args()
 
+    sg_ids = set(args.sg_ids.split(','))
+
     subset_mt_to_sgs(
         mt_path=args.mt_path,
-        sg_ids=args.sg_ids,
+        sg_ids=sg_ids,
         out_mt_path=args.out_mt_path,
     )
 
