@@ -29,10 +29,9 @@ def annotate_cohort_jobs_snps_indels(
             --out_mt_path {out_mt_path} \\
             --vep_ht_path {vep_ht_path} \\
             --checkpoint_prefix {checkpoint_prefix} \\
+            --remove_invalid_contigs \\
         """
-        f"--init_batch_args {init_batch_args} \\" if init_batch_args else ' \\'
-        """
-            --remove_invalid_contigs
-        """
+        f'  --init_batch_args {init_batch_args}' if init_batch_args else ' \\'
+
     )
     return j
