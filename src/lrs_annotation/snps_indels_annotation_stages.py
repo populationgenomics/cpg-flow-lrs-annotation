@@ -77,7 +77,9 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         test = config_retrieve(['workflow', 'access_level']) == 'test'
         datasets = [d.name + '-test' if test else d.name for d in multicohort.get_datasets()]
 
-        lrs_sgid_mapping, _ = query_for_lrs_to_sg_id_and_sex_mapping(datasets)
+        sequencing_types = list(get_config_options_as_tuple('sequencing_types'))
+
+        lrs_sgid_mapping, _ = query_for_lrs_to_sg_id_and_sex_mapping(datasets, seq_types=sequencing_types)
         mapping_file_path = self.prefix / 'lrs_sgid_mapping.txt'
         logger.info(f'Writing LRS ID to SG ID mapping to {mapping_file_path}')
         write_mapping_to_file(lrs_sgid_mapping, mapping_file_path)
