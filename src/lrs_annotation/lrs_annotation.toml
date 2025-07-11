@@ -30,6 +30,3 @@ username = 'seqr'
 # Load ElasticSearch password from a secret, unless SEQR_ES_PASSWORD is set
 password_secret_id = 'seqr-es-password'
 password_project_id = 'seqr-308602'
-
-[images]
-bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools'
