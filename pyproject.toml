@@ -42,15 +42,7 @@ test = [
 ]
 
 [project.scripts]
-# home for any scripts which will be installed
-# e.g. this minimal "Hello, World!" script which can be run by alias when this package is installed
-# $ say_hello
-# >> Hello, World!
-# $ say_hello cpg-flow
-# >> Hello, cpg-flow!
-say_hello = 'lrs_annotation.scripts.hello_world:cli_main'
-
-# the workflow runner script - entrypoint for the pipeline
+# the workflow runner script - entrypoint for the pipelines
 run_workflow = 'lrs_annotation.run_workflow:cli_main'
 
 [tool.setuptools]
