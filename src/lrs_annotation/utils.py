@@ -62,7 +62,7 @@ def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
 
     # Disk
     if 'storage_gib' in overrides:
-        job.storage(convert_to_gib(overrides['storage_gb']))
+        job.storage(convert_to_gib(overrides['storage_gib']))
 
     # Memory
     if overrides.get('memory') in ('lowmem', 'standard', 'highmem'):
