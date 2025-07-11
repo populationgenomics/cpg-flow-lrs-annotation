@@ -9,7 +9,7 @@ import hail as hl
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import genome_build, init_batch
 from cpg_flow.utils import checkpoint_hail
-from lrs_annotation.hail_scripts import variant_id, vep
+from lrs_annotation.hail_scripts.computed_fields import variant_id, vep
 from lrs_annotation.utils import parse_init_batch_args
 
 

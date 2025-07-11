@@ -1,3 +1,4 @@
+# Copied from https://github.com/broadinstitute/seqr-loading-pipelines/tree/master/hail_scripts/computed_fields
 import hail as hl
 
 

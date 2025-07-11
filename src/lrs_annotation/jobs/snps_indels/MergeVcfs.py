@@ -25,7 +25,7 @@ def merge_snps_indels_vcf_with_bcftools(
     merge_job.cpu(resource_overrides.get('cpu', 4))
     merge_job.memory(resource_overrides.get('memory', '16Gi'))
     merge_job.storage(resource_overrides.get('storage', '50Gi'))
-    merge_job.declare_resource_group(output={'vcf.bgz': '{root}.vcf.bgz', 'vcf.bgz.tbi': '{root}.vcf.bgz.tbi'})
+    merge_job.declare_resource_group(output={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'})
 
     # BCFtools options breakdown:
     #   --threads: number of threads to use

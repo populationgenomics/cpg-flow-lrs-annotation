@@ -1,26 +1,5 @@
 """
-This file exists to define all the Stages for the workflow.
-The logic for each stage can be contained here (if it is not too complex),
-or can be delegated to a separate file in jobs.
-
-Naming conventions for Stages are not enforced, but a series of recommendations have been made here:
-
-https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/185597962/Pipeline+Naming+Convention+Specification
-
-A suggested naming convention for a stages is:
-  - PascalCase (each word capitalized, no hyphens or underscores)
-  - If the phrase contains an initialism (e.g. VCF), only the first character should be capitalised
-  - Verb + Subject (noun) + Preposition + Direct Object (noun)  TODO(anyone): please correct my grammar is this is false
-  e.g. AlignShortReadsWithBowtie2, or MakeSitesOnlyVcfWithBcftools
-  - This becomes self-explanatory when reading the code and output folders
-
-Each Stage should be a Class, and should inherit from one of
-  - SequencingGroupStage
-  - DatasetStage
-  - CohortStage
-  - MultiCohortStage
-
-Workflow for finding long-read SNPs_Indels files, updating file contents, merging, and annotating the results
+Workflow for annotating long-read SNPs and Indels data into a seqr-ready format.
 """
 
 from loguru import logger
@@ -36,19 +15,23 @@ from cpg_flow.workflow import (
     get_workflow,
 )
 
-from jobs.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
-from jobs.AnnotateDatasetMatrixtable import annotate_dataset_jobs
-from jobs.AnnotateWithVep import add_vep_jobs
-from jobs.ExportMtToElastic import export_snps_indels_mt_to_elastic
-from jobs.MergeVcfs import merge_snps_indels_vcf_with_bcftools
-from jobs.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
-from jobs.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
+from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
+from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
+from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
+from jobs.snps_indels.ExportMtToElastic import export_snps_indels_mt_to_elastic
+from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
+from jobs.snps_indels.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
+from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
 
+from inputs import (
+    query_for_lrs_vcfs,
+    query_for_lrs_mappings
+)
 
 from utils import (
-    get_config_options_as_tuple,
-    query_for_lrs_vcfs,
-    query_for_lrs_to_sg_id_and_sex_mapping,
+    get_dataset_name,
+    get_dataset_names,
+    get_query_filter_from_config,
     write_mapping_to_file,
     joint_calling_scatter_count,
     es_password,
@@ -72,19 +55,21 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         Write the LRS ID to SG ID mapping to a file
         This is used by bcftools reheader to update the sample IDs in the VCFs
         """
-        output = self.expected_outputs(multicohort)
+        lrs_mapping = query_for_lrs_mappings(
+            dataset_names=get_dataset_names(multicohort.get_datasets()),
+            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False)
+        )
 
-        test = config_retrieve(['workflow', 'access_level']) == 'test'
-        datasets = [d.name + '-test' if test else d.name for d in multicohort.get_datasets()]
-
-        sequencing_types = list(get_config_options_as_tuple('sequencing_types'))
-
-        lrs_sgid_mapping, _ = query_for_lrs_to_sg_id_and_sex_mapping(datasets, seq_types=sequencing_types)
+        lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
         mapping_file_path = self.prefix / 'lrs_sgid_mapping.txt'
-        logger.info(f'Writing LRS ID to SG ID mapping to {mapping_file_path}')
-        write_mapping_to_file(lrs_sgid_mapping, mapping_file_path)
 
-        return self.make_outputs(multicohort, data=output)
+        logger.info(f'Writing LRS ID to SG ID mapping to {mapping_file_path}')
+        write_mapping_to_file(
+            mapping=lrs_sg_id_mapping,
+            output_path=mapping_file_path,
+        )
+
+        return self.make_outputs(multicohort, data=self.expected_outputs(multicohort))
 
 
 @stage.stage(required_stages=[WriteLrsIdToSgIdMappingFile])
@@ -96,8 +81,8 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         sgid_prefix = sequencing_group.dataset.prefix() / 'long_read' / 'reformatted_vcfs'
         return {
-            'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.bgz',
-            'index': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.bgz.tbi',
+            'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.gz',
+            'index': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.gz.tbi',
         }
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -107,24 +92,14 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
-        test = config_retrieve(['workflow', 'access_level']) == 'test'
-        sg_vcfs = query_for_lrs_vcfs(
-            dataset_name=sg.dataset.name + '-test' if test else sg.dataset.name,
-            sequencing_types=get_config_options_as_tuple('sequencing_types'),
-            analysis_types=get_config_options_as_tuple('analysis_types'),
-            variant_types=get_config_options_as_tuple('variant_types'),
-            variant_callers=get_config_options_as_tuple('variant_callers'),
-            pipeface_versions=get_config_options_as_tuple('pipeface_versions'),
-            joint_called=config_retrieve(['workflow', 'lrs_annotation', 'joint_called'], default=False),
-            verbose=config_retrieve(['workflow', 'lrs_annotation', 'verbose'], default=False),
-        )
+        sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
         if sg.id not in sg_vcfs:
             return None
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 
         # Input VCF
-        sg_vcf: str = sg_vcfs[sg.id]['output']
+        vcf_path: str = sg_vcfs[sg.id]['vcf']
 
         # Required file for reheadering
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sgid_mapping')
@@ -132,14 +107,14 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
         reformatting_job = reformat_snps_indels_vcf_with_bcftools(
             batch=get_batch(),
-            job_name=f'Reformatting SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{sg_vcf}',
+            job_name=f'Reformat SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{vcf_path}',
             job_attrs={'tool': 'bcftools'},
-            vcf_path=sg_vcf,
+            vcf_path=vcf_path,
             lrs_sg_id_mapping_path=lrs_sg_id_mapping,
         )
 
         outputs = self.expected_outputs(sg)
-        get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.bgz'))
+        get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.gz'))
 
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
@@ -152,8 +127,8 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
 
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
-            'vcf': self.prefix / 'merged_reformatted_snps_indels.vcf.bgz',
-            'index': self.prefix / 'merged_reformatted_snps_indels.vcf.bgz.tbi',
+            'vcf': self.prefix / 'merged_reformatted_snps_indels.vcf.gz',
+            'index': self.prefix / 'merged_reformatted_snps_indels.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -179,7 +154,7 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
         )
 
         outputs = self.expected_outputs(multicohort)
-        get_batch().write_output(merge_job.output, str(outputs['vcf']).removesuffix('.vcf.bgz'))
+        get_batch().write_output(merge_job.output, str(outputs['vcf']).removesuffix('.vcf.gz'))
 
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 

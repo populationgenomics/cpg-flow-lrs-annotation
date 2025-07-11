@@ -1,85 +1,75 @@
 """
-suggested location for any utility methods or constants used across multiple stages
+Utility methods used across the workflows
 """
-
-from datetime import datetime
-from functools import cache
-
-from loguru import logger
-
+from hailtop.batch.job import BashJob
 from cpg_utils import Path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
-from metamist.graphql import gql, query
 
-DATE_STRING: str = datetime.now().strftime('%y-%m-%d')  # noqa: DTZ005
 
-VCF_QUERY = gql(
+def get_dataset_name(dataset: str) -> str:
     """
-    query MyQuery($dataset: String!, $seqTypes: [String!], $analysisTypes: [String!], $metaFilter: JSON) {
-      project(name: $dataset) {
-        sequencingGroups(type: {in_: $seqTypes}, technology: {eq: "long-read"}) {
-          id
-          type
-          technology
-          platform
-          analyses(type: {in_: $analysisTypes}, meta: $metaFilter) {
-            id
-            type
-            meta
-            output
-            outputs
-          }
-        }
-      }
-    }
-    """,
-)
-
-LRS_IDS_QUERY = gql(
+    Add -test suffix to dataset name if in test mode.
     """
-    query MyQuery($dataset: String!, $seqTypes: [String!]) {
-    project(name: $dataset) {
-      sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}) {
-          id
-          sample {
-            externalId
-            meta
-            participant {
-              externalId
-              reportedSex
-            }
-          }
-        }
-      }
-    }
-    """,
-)
+    test = config_retrieve(['workflow', 'access_level']) == 'test'
+    return dataset + '-test' if test else dataset
 
 
-def get_config_options_as_tuple(field_name: str) -> tuple[str] | None:
+def get_dataset_names(datasets: str | list[str]) -> list[str]:
     """
-    Get a tuple of values from the config, for use with cached functions
+    Add -test suffix to dataset names if in test mode.
+    """
+    return [get_dataset_name(dataset) for dataset in datasets]
+
+
+def get_query_filter_from_config(field_name: str, make_tuple = True) -> tuple[str] | list[str] | None:
+    """
+    Get values for the specified field from the workflow.lrs_annotation config dictionary.
+
+    Returns tuples by default, because they are needed for use with cached functions.
     """
     if values := config_retrieve(
-        ['workflow', 'lrs_annotation', field_name],
+        ['workflow', 'query_filter', field_name],
         default=None,
     ):
         if isinstance(values, str):
             values = (values,)
+        if not make_tuple:
+            return list(values)
         return tuple(values)
     return None
 
 
-def get_resource_overrides_for_job(job_name: str) -> dict[str, str | int]:
+def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
     """
-    Get the resource overrides for a job from the config.
-    Returns a dictionary of resource overrides, e.g. {'storage_gb': 10, 'cores': 4}
+    Get the resource overrides for a job from the workflow.resource_overrides config dictionary.
+     e.g. {'storage_gib': 10, 'cpu_cores': 4}
+    If no overrides are found, the job is returned unchanged.
     """
-    overrides = config_retrieve(['workflow', 'resource_overrides', job_name], {})
+    def convert_to_gib(value: str | int) -> str:
+        """
+        Convert a value to a string with 'Gi' suffix for Gibibytes, or 2^30 bytes.
+        """
+        if isinstance(value, str) and value.endswith(('G', 'Gi')):
+            return value
+        if isinstance(value, int):
+            return f'{value}Gi'
+        return f'{value}Gi'
+
+    overrides = config_retrieve(['workflow', 'resource_overrides', job_key], {})
     if not isinstance(overrides, dict):
-        raise ValueError(f'Expected a dictionary for resource overrides for {job_name}, got {overrides}')
-    return overrides
+        raise ValueError(f'Expected a dictionary for resource overrides for {job_key}, got {overrides}')
+
+    if 'storage_gib' in overrides:
+        job.storage(convert_to_gib(overrides['storage_gb']))
+    if 'memory_gib' in overrides:
+        job.memory(convert_to_gib(overrides['memory_gib']))
+    if 'cpu_cores' in overrides:
+        job.cpu(overrides['cpu_cores'])
+    if 'spot' in overrides:
+        job.spot(overrides['spot'])
+
+    return job
 
 
 def get_intervals_from_bed(intervals_path: Path) -> list[str]:
@@ -124,11 +114,11 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
     return 50
 
 
-def write_mapping_to_file(mapping: dict[str, str], output_file: Path) -> None:
+def write_mapping_to_file(mapping: dict[str, str], output_path: Path) -> None:
     """
     Write a mapping to a file
     """
-    with output_file.open('w') as f:
+    with output_path.open('w') as f:
         for k, v in mapping.items():
             f.write(f'{k} {v}\n')
 
@@ -144,197 +134,3 @@ def es_password() -> str:
         fail_gracefully=False,
     )
 
-
-def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
-    """
-    Find the SGs to skip in the reformatting stage
-    These are the parents if the family has been joint-called
-    """
-    sgs_to_skip = set()
-    joint_called_families = set()
-    for vcf_analysis in sg_vcf_dict.values():
-        analysis_meta = vcf_analysis['meta']
-        if analysis_meta.get('joint_called', False):
-            joint_called_families.add(analysis_meta.get('family_id', ''))
-    for sg_id, vcf_analysis in sg_vcf_dict.items():
-        analysis_meta = vcf_analysis['meta']
-        # Skip the parents if the family has been joint-called
-        # Parents are identified by their participant ID ending in 01 or 02
-        if (
-            analysis_meta.get('family_id', '') in joint_called_families
-            and analysis_meta.get('participant_id', '').endswith(('01', '02'))
-        ):
-            sgs_to_skip.add(sg_id)
-    return sgs_to_skip
-
-
-def get_init_batch_args_for_job(job_name: str) -> str:
-    """
-    Finds init_batch args for a particular job from the config.
-
-    Converts the dict into a string of key value pairs so it can be passed to the batch job
-    via the command line.
-    e.g. {'worker_memory': 'highmem'} -> 'init_batch(worker_memory="highmem")'
-    """
-    init_batch_args: dict[str, str | int] = {}
-    workflow_config = config_retrieve(['workflow', job_name], {})
-
-    # Memory parameters
-    for config_key, batch_key in [('highmem_workers', 'worker_memory'), ('highmem_drivers', 'driver_memory')]:
-        if workflow_config.get(config_key):
-            init_batch_args[batch_key] = 'highmem'
-    # Cores parameter
-    for key in ['driver_cores', 'worker_cores']:
-        if workflow_config.get(key):
-            init_batch_args[key] = workflow_config[key]
-
-    # translate any input arguments into an embeddable String
-    return ', '.join(f'{k}={v!r}' for k, v in init_batch_args.items()) if init_batch_args else ''
-
-
-def parse_init_batch_args(init_batch_args: str | None) -> dict[str, str | int]:
-    """
-    Parse the init_batch_args string into a dictionary.
-    e.g. 'worker_memory="highmem", driver_memory="highmem"' -> {'worker_memory': 'highmem', 'driver_memory': 'highmem'}
-    """
-    if not init_batch_args:
-        return {}
-    args = {}
-    for arg in init_batch_args.split(','):
-        key, value = arg.split('=')
-        args[key.strip()] = value.strip().strip("'")
-    return args
-
-
-@cache
-def query_for_lrs_vcfs(
-    dataset_name: str,
-    sequencing_types: tuple[str],
-    analysis_types: tuple[str],
-    variant_types: tuple[str],
-    variant_callers: tuple[str] | None,
-    pipeface_versions: tuple[str] | None,
-    joint_called: bool = False,
-    verbose: bool = False,
-) -> dict[str, dict]:
-    """
-    Query metamist for the long-read sequencing VCFs
-    Return a dictionary of each CPG ID and its corresponding VCF
-    This result is cached - used in a SequencingGroupStage, but we only want to query for it once instead of once/SG
-    Uses tuples for the inputs, so that they can be cached
-
-    Args:
-        dataset_name (str): the name of the dataset
-        sequencing_types (tuple[str]): allowed sequencing types, e.g. ('genome', 'adaptive_sampling')
-        variant_types (tuple[str] | None): allowed variant types, e.g. ('SNV', 'SV')
-        variant_callers: (tuple[str] | None): allowed variant callers, e.g. ('deeptrio', 'sniffles')
-        pipeface_versions (tuple[str] | None): allowed pipeface versions, e.g. ('v0.6.1', 'v0.7.0')
-        joint_called (bool): whether to look for and preference joint-called VCFs
-        verbose (bool): whether to print skipped VCFs to the log
-
-    Returns:
-        a dictionary of the SG IDs and their corresponding VCFs
-    """
-    if verbose:
-        logger.info(
-            f'{dataset_name} :: Finding {variant_types} single-sample VCFs for sequencing types: {sequencing_types},'
-            f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
-        )
-    single_sample_vcfs: dict[str, dict] = {}
-
-    meta_filter = {
-        'variant_type': {'in_': variant_types} if variant_types else None,
-        'caller': {'in_': variant_callers} if variant_callers else None,
-        'pipeface_version': {'in_': pipeface_versions} if pipeface_versions else None,
-        'joint_called': {'eq': False},
-    }
-    single_sample_vcfs_query_results = query(
-        VCF_QUERY,
-        variables={
-            'dataset': dataset_name,
-            'seqTypes': sequencing_types,
-            'analysisTypes': analysis_types,
-            'metaFilter': meta_filter,
-        },
-    )
-    for sg in single_sample_vcfs_query_results['project']['sequencingGroups']:
-        for analysis in sg['analyses']:
-            single_sample_vcfs[sg['id']] = {
-                'output': analysis['output'],
-                'meta': analysis['meta'],
-            }
-    if verbose:
-        logger.info(
-            f'{dataset_name} :: Found {len(single_sample_vcfs)} single-sample VCFs.',
-        )
-    if not joint_called:
-        return single_sample_vcfs
-
-    # If joint_called is True, we need to query for the joint-called VCFs
-    # And prefer them over the single-sample VCFs
-    if verbose:
-        logger.info(
-            f'Finding {variant_types} joint-called VCFs in {dataset_name} for sequencing types: {sequencing_types},'
-            f' callers: {variant_callers}, pipeface versions: {pipeface_versions}',
-        )
-    joint_called_vcfs: dict[str, dict] = {}
-    meta_filter['joint_called'] = {'eq': True}
-    joint_called_vcfs_query_results = query(
-        VCF_QUERY,
-        variables={
-            'dataset': dataset_name,
-            'seqTypes': sequencing_types,
-            'analysisType': analysis_types,
-            'metaFilter': meta_filter
-        },
-    )
-    for sg in joint_called_vcfs_query_results['project']['sequencingGroups']:
-        for analysis in sg['analyses']:
-            joint_called_vcfs[sg['id']] = {
-                'output': analysis['output'],
-                'meta': analysis['meta'],
-            }
-
-    # Prefer the joint-called VCFs over the single-sample VCFs
-    sg_vcfs = {}
-    for sg_id, single_sample_vcf in single_sample_vcfs.items():
-        if sg_id not in joint_called_vcfs:
-            sg_vcfs[sg_id] = single_sample_vcf
-            continue
-        sg_vcfs[sg_id] = joint_called_vcfs[sg_id]
-    for sg_id, joint_called_vcf in joint_called_vcfs.items():
-        if sg_id not in sg_vcfs:
-            sg_vcfs[sg_id] = joint_called_vcf
-
-    # Remove the parents entries if their family has a joint-called VCF
-    sgs_to_skip = find_sgs_to_skip(sg_vcfs)
-    return_dict = {}
-    for sg_id, vcf_analysis in sg_vcfs.items():
-        if sg_id in sgs_to_skip:
-            logger.info(f'Skipping {sg_id} as it is a parent in a joint-called VCF')
-            continue
-        return_dict[sg_id] = vcf_analysis
-
-    return return_dict
-
-
-def query_for_lrs_to_sg_id_and_sex_mapping(datasets: list[str], seq_types: list[str]):
-    """
-    Query metamist for the LRS ID corresponding to each sequencing group ID, and to its participant's sex
-    """
-    lrs_sgid_mapping = {}
-    lrs_id_sex_mapping = {}
-    for dataset in datasets:
-        query_results = query(LRS_IDS_QUERY, variables={'dataset': dataset, 'seqTypes': seq_types})
-        for sg in query_results['project']['sequencingGroups']:
-            sample = sg['sample']
-            participant = sample['participant']
-            lrs_id = sample['meta'].get('lrs_id', None)
-            if not lrs_id:
-                logger.warning(
-                    f'{dataset} :: No LRS ID found for {participant["externalId"]} - {sample["externalId"]}',
-                )
-                continue
-            lrs_sgid_mapping[lrs_id] = sg['id']
-            lrs_id_sex_mapping[lrs_id] = participant['reportedSex']
-    return lrs_sgid_mapping, lrs_id_sex_mapping
