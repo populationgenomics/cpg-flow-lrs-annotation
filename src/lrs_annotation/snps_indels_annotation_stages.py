@@ -56,7 +56,7 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         This is used by bcftools reheader to update the sample IDs in the VCFs
         """
         lrs_mapping = query_for_lrs_mappings(
-            dataset_names=get_dataset_names(multicohort.get_datasets()),
+            dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
             sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False)
         )
 
