@@ -31,7 +31,7 @@ def merge_snps_indels_vcf_with_bcftools(
     #   +fill-tags: plugin to compute and fill in the INFO tags (AF, AN, AC)
     merge_job.command(
         f'bcftools merge {" ".join(batch_vcfs)} --threads 4 -m none -0 -Ou | '
-        f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.bgz"]} --write-index=tbi -- -t AF,AN,AC'
+        f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.gz"]} --write-index=tbi -- -t AF,AN,AC'
     )
 
     return merge_job
