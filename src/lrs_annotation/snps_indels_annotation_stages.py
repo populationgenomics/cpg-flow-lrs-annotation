@@ -352,7 +352,7 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
         Expected to generate a Seqr index, which is not a file
         """
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
-        index_name = f'{dataset.name}-{sequencing_type}-LR-SNPsIndels-{get_workflow().run_timestamp}'.lower()
+        index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{get_workflow().run_timestamp}'.lower()
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'es' / f'{index_name}.done',
