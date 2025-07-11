@@ -2,7 +2,6 @@
 import hailtop.batch as hb
 from hailtop.batch.job import Job
 
-from cpg_flow.resources import STANDARD
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import command

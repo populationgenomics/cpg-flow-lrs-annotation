@@ -12,13 +12,16 @@ ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapie
 # prefer_joint_called = false
 # parental_id_suffixes = [ '01', '02', ]
 
-[workflow.lrs_annotation.resource_overrides.reformat_snps_indels_vcf]
-# cpu = 4
-# memory = '16Gi'
-# storage = '50Gi'
+[workflow.resource_overrides.reformat_snps_indels_vcf]
+cpu_cores = 1
+memory_gib = '4Gi'
+storage_gib = '5Gi'
 
-[workflow.lrs_annotation.resource_overrides.merge_job]
-# cpu = 4
-# memory = '16Gi'
-# storage = '50Gi'
+[workflow.resource_overrides.merge_snps_indels_vcfs]
+cpu_cores = 4
+memory_gib = '16Gi'
+storage_gib = '50Gi'
 
+[workflow.resource_overrides.export_mt_to_elastic]
+cpu_cores = 4
+memory = 'lowmem'

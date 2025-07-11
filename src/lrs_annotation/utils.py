@@ -60,16 +60,63 @@ def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
     if not isinstance(overrides, dict):
         raise ValueError(f'Expected a dictionary for resource overrides for {job_key}, got {overrides}')
 
+    # Disk
     if 'storage_gib' in overrides:
         job.storage(convert_to_gib(overrides['storage_gb']))
-    if 'memory_gib' in overrides:
+
+    # Memory
+    if overrides.get('memory') in ('lowmem', 'standard', 'highmem'):
+        job.memory(overrides['memory'])
+    elif 'memory_gib' in overrides:
         job.memory(convert_to_gib(overrides['memory_gib']))
+
+    # Cores
     if 'cpu_cores' in overrides:
         job.cpu(overrides['cpu_cores'])
+
+    # Spot (preemptible) instance
     if 'spot' in overrides:
         job.spot(overrides['spot'])
 
     return job
+
+
+def get_init_batch_args_for_job(job_name: str) -> str:
+    """
+    Finds init_batch args for a particular job from the config.
+
+    Converts the dict into a string of key value pairs so it can be passed to the batch job
+    via the command line.
+    e.g. {'worker_memory': 'highmem'} -> 'init_batch(worker_memory="highmem")'
+    """
+    init_batch_args: dict[str, str | int] = {}
+    workflow_config = config_retrieve(['workflow', job_name], {})
+
+    # Memory parameters
+    for config_key, batch_key in [('highmem_workers', 'worker_memory'), ('highmem_drivers', 'driver_memory')]:
+        if workflow_config.get(config_key):
+            init_batch_args[batch_key] = 'highmem'
+    # Cores parameter
+    for key in ['driver_cores', 'worker_cores']:
+        if workflow_config.get(key):
+            init_batch_args[key] = workflow_config[key]
+
+    # translate any input arguments into an embeddable String
+    return ', '.join(f'{k}={v!r}' for k, v in init_batch_args.items()) if init_batch_args else ''
+
+
+def parse_init_batch_args(init_batch_args: str | None) -> dict[str, str]:
+    """
+    Parse the init_batch_args string into a dictionary.
+    e.g. 'worker_memory="highmem", driver_memory="highmem"' -> {'worker_memory': 'highmem', 'driver_memory': 'highmem'}
+    """
+    if not init_batch_args:
+        return {}
+    args = {}
+    for arg in init_batch_args.split(','):
+        key, value = arg.split('=')
+        args[key.strip()] = value.strip().strip("'")
+    return args
 
 
 def get_intervals_from_bed(intervals_path: Path) -> list[str]:
@@ -133,4 +180,3 @@ def es_password() -> str:
         secret_name=config_retrieve(['elasticsearch', 'password_secret_id']),
         fail_gracefully=False,
     )
-
