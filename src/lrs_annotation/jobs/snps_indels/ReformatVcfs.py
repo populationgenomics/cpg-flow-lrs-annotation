@@ -36,6 +36,6 @@ def reformat_snps_indels_vcf_with_bcftools(
     reformatting_job.command(
         f'bcftools reheader --samples {local_id_mapping} {local_vcf} | '
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
-        f'bcftools sort -Oz -W=tbi -- {reformatting_job.vcf_out["vcf.gz"]}'
+        f'bcftools sort -Oz -W=tbi - -o {reformatting_job.vcf_out["vcf.gz"]}'
     )
     return reformatting_job
