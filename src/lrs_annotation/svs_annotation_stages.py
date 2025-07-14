@@ -109,7 +109,6 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'sniffles_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_sniffles_modified_svs.vcf.gz',
-            'index': sgid_prefix / f'{sequencing_group.id}_sniffles_modified_svs.vcf.gz.tbi',
         }
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
