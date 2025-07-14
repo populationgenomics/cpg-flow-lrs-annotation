@@ -146,7 +146,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
 
 
-@stage.stage(required_stages=ModifySVsVcfWithSniffles)
+@stage.stage(required_stages=[ModifySVsVcfWithSniffles, WriteLrsIdToSgAndSexMappingFiles])
 class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
     """
     Reformat the Sniffles-modified long-read SV VCFs using BCFtools
