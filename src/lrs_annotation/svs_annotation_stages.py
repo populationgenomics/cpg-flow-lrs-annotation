@@ -42,7 +42,7 @@ from utils import (
 from google.api_core.exceptions import PermissionDenied
 
 
-@stage
+@stage.stage
 class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
     """
     Write the LRS ID to SG ID and LRS ID to sex mappings to files.
@@ -78,7 +78,7 @@ class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
 
         return self.make_outputs(multicohort, data=self.expected_outputs(multicohort))
 
-@stage
+@stage.stage
 class WriteCleanedPedFile(stage.MultiCohortStage):
     """
     Write a cleaned PED file for the cohort, concatenating all samples across all datasets with the reference panel.
@@ -99,7 +99,7 @@ class WriteCleanedPedFile(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs)
 
 
-@stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles])
+@stage.stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles])
 class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
     """
     Modify the long-read SV VCFs using Sniffles, saving them to temp storage for use in the next stage.
@@ -146,7 +146,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
 
 
-@stage(required_stages=ModifySVsVcfWithSniffles)
+@stage.stage(required_stages=ModifySVsVcfWithSniffles)
 class ReformatSVsVcfWithBcftools(stage.MultiCohortStage):
     """
     Reformat the Sniffles-modified long-read SV VCFs using BCFtools
@@ -186,7 +186,7 @@ class ReformatSVsVcfWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
-@stage(required_stages=ReformatSVsVcfWithBcftools)
+@stage.stage(required_stages=ReformatSVsVcfWithBcftools)
 class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
     """
     Merge the reformatted SVs VCFs together with bcftools
@@ -228,7 +228,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage(required_stages=[
+@stage.stage(required_stages=[
     WriteCleanedPedFile,
     ModifySVsVcfWithSniffles,
     ReformatSVsVcfWithBcftools,
@@ -262,7 +262,7 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
         return self.make_outputs(multicohort, jobs=jobs, data=outputs)
 
 
-@stage(required_stages=AnnotateSVsWithGatk)
+@stage.stage(required_stages=AnnotateSVsWithGatk)
 class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
     """
     Annotate the long-read SVs VCF with STRVCTVRE.
@@ -293,7 +293,7 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
         return self.make_outputs(multicohort, jobs=strvctvre_job,  data=outputs)
 
 
-@stage(required_stages=AnnotateSVsWithStrvctvre)
+@stage.stage(required_stages=AnnotateSVsWithStrvctvre)
 class AnnotateCohortSVsMtFromVcfWithHail(stage.MultiCohortStage):
     """
     First step to transform annotated SV callset data into a seqr ready format
@@ -323,7 +323,7 @@ class AnnotateCohortSVsMtFromVcfWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage(required_stages=[AnnotateCohortSVsMtFromVcfWithHail], analysis_type='sv', analysis_keys=['mt'])
+@stage.stage(required_stages=[AnnotateCohortSVsMtFromVcfWithHail], analysis_type='sv', analysis_keys=['mt'])
 class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the MT to be this Dataset only
@@ -363,7 +363,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
-@stage(
+@stage.stage(
     required_stages=[SubsetSVsMtToDatasetWithHail],
     analysis_type='es-index',
     analysis_keys=['index_name'],
