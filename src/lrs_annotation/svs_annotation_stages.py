@@ -168,9 +168,8 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
         if sg.id not in sg_vcfs:
             return None
 
-        reformatted_vcfs = inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)
         # Input VCF and reheadering file
-        vcf_path: str = reformatted_vcfs[sg.id]['vcf']
+        vcf_path: str = sg_vcfs[sg.id]['vcf']
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_sg_id_mapping')
 
         reformatting_job = reformat_svs_vcf_with_bcftools(
