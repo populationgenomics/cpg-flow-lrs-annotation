@@ -369,7 +369,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
     analysis_keys=['index_name'],
     update_analysis_meta=lambda x: {'seqr-dataset-type': 'SV'},  # noqa: ARG005
 )
-class ExportLongReadSVsMtToElasticIndex(stage.DatasetStage):
+class ExportSVsMtToElasticIndex(stage.DatasetStage):
     """
     Create a Seqr index
     https://github.com/populationgenomics/metamist/issues/539

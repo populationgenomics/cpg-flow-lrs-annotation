@@ -14,7 +14,7 @@ from argparse import ArgumentParser
 from cpg_flow.workflow import run_workflow
 
 from lrs_annotation.snps_indels_annotation_stages import ExportSnpsIndelsMtToESIndex
-from lrs_annotation.svs_annotation_stages import ExportLongReadSVsMtToElasticIndex
+from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex
 
 
 def cli_main():
@@ -33,7 +33,7 @@ def cli_main():
     # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
 
-    stages = [ExportLongReadSVsMtToElasticIndex] if args.workflow == 'svs' else [ExportSnpsIndelsMtToESIndex]
+    stages = [ExportSVsMtToElasticIndex] if args.workflow == 'svs' else [ExportSnpsIndelsMtToESIndex]
 
     run_workflow(stages=stages, dry_run=args.dry_run)
 
