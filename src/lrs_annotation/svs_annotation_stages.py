@@ -290,7 +290,7 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
 
         strvctvre_job = annotate_strvctvre_job(
             input_vcf=input_vcf,
-            vcf_out_path=outputs['strvctvre_vcf'],
+            output_path=outputs['strvctvre_vcf'],
             job_attrs=self.get_job_attrs(),
         )
 
