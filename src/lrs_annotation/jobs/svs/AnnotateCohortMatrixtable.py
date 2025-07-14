@@ -10,7 +10,7 @@ from lrs_annotation.scripts.svs import vcf_to_annotate_cohort_mt
 def annotate_cohort_jobs_svs(
     vcf_path: Path,
     out_mt_path: Path,
-    gencode_gz_path: Path,
+    gencode_gtf_path: Path,
     checkpoint_prefix: Path,
     job_attrs: dict | None = None,
 ) -> Job:
@@ -24,7 +24,7 @@ def annotate_cohort_jobs_svs(
         python3 {vcf_to_annotate_cohort_mt.__file__} \\
             --vcf_path {vcf_path} \\
             --out_mt_path {out_mt_path} \\
-            --gencode_gz {gencode_gz_path} \\
+            --gencode_gz {gencode_gtf_path} \\
             --checkpoint_prefix {checkpoint_prefix} \
         """
     )

@@ -320,6 +320,7 @@ class AnnotateCohortSVsMtFromVcfWithHail(stage.MultiCohortStage):
         job = annotate_cohort_jobs_svs(
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
+            gencode_gtf_path=config_retrieve(['workflow', 'gencode_gtf_file']),
             checkpoint_prefix=self.tmp_prefix / 'checkpoints',
             job_attrs=self.get_job_attrs(multicohort),
         )
