@@ -169,7 +169,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
             return None
 
         # Input VCF and reheadering file
-        vcf_path: str = sg_vcfs[sg.id]['vcf']
+        vcf_path = inputs.as_path(sg, ModifySVsVcfWithSniffles, 'vcf')
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_sg_id_mapping')
 
         reformatting_job = reformat_svs_vcf_with_bcftools(
