@@ -193,8 +193,8 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
     """
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
-            'vcf': self.tmp_prefix / 'merged_reformatted_svs.vcf.bgz',
-            'index': self.tmp_prefix / 'merged_reformatted_svs.vcf.bgz.tbi',
+            'vcf': self.tmp_prefix / 'merged_reformatted_svs.vcf.gz',
+            'index': self.tmp_prefix / 'merged_reformatted_svs.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -243,8 +243,8 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
     """
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
-            'annotated_vcf': self.tmp_prefix / 'annotated_long_read_svs.vcf.bgz',
-            'annotated_vcf_index': self.tmp_prefix / 'annotated_long_read_svs.vcf.bgz.tbi',
+            'annotated_vcf': self.tmp_prefix / 'annotated_long_read_svs.vcf.gz',
+            'annotated_vcf_index': self.tmp_prefix / 'annotated_long_read_svs.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
