@@ -426,7 +426,7 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         )
 
         job = export_mt_to_elasticsearch(
-            dataset=dataset,
+            batch=get_batch(),
             mt_path=mt_path,
             index_name=index_name,
             flag_name=flag_name,
