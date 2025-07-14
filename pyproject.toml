@@ -3,9 +3,8 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# TODO(you): update this to reflect the project's name & description
 name='lrs_annotation'
-description='A pipeline for creating annotated callsets containing SNPs and indels from long-read sequencing data'
+description='A pipeline for creating annotated callsets containing SNPs and indels OR SVs from long-read sequencing data'
 readme = "README.md"
 # currently cpg-flow is pinned to this version
 requires-python = ">=3.10,<3.11"
@@ -27,7 +26,6 @@ dependencies=[
 ]
 
 [project.urls]
-# TODO(you): update this to reflect the project's official homepage
 Repository = "https://github.com/populationgenomics/cpg-flow-lrs-annotation"
 
 [project.optional-dependencies]
@@ -114,3 +112,4 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 # suppress the ARG002 "Unused method argument" warning in the stages.py file
 ## - we don't need generic cpg-flow arguments for every Stage, but need to fit the required method signature
 "src/lrs_annotation/snps_indels_annotation_stages.py" = ["ARG002"]
+"src/lrs_annotation/svs_annotation_stages.py" = ["ARG002"]

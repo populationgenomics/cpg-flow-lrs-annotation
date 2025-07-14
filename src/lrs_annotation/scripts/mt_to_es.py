@@ -1,7 +1,5 @@
 """
-I've peppered this with references to the original source code I'm borrowing/stealing from
-
-major sources:
+Original source code borrowed from:
 https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/hail_elasticsearch_client.py
 https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/luigi_pipeline/lib/hail_tasks.py
 """

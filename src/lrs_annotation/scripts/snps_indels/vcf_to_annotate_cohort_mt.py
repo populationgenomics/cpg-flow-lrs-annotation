@@ -10,7 +10,7 @@ from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import genome_build, init_batch
 from cpg_flow.utils import checkpoint_hail
 from lrs_annotation.hail_scripts.computed_fields import variant_id, vep
-from lrs_annotation.utils import parse_init_batch_args
+from lrs_annotation.utils import get_init_batch_args_for_job
 
 
 def annotate_cohort(
@@ -18,14 +18,13 @@ def annotate_cohort(
     out_mt_path: str,
     vep_ht_path: str,
     checkpoint_prefix: str | None = None,
-    init_batch_args: str | None = None,
     remove_invalid_contigs: bool = False,
 ):
     """
     Convert VCF to matrix table, annotate for Seqr Loader, add VEP and VQSR
     annotations.
     """
-    init_batch(**parse_init_batch_args(init_batch_args))
+    init_batch(**get_init_batch_args_for_job('annotate_cohort_snps_indels'))
 
     # tune the logger correctly
     logging.getLogger().setLevel(logging.INFO)
@@ -178,12 +177,6 @@ def cli_main():
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to the output Matrix Table file')
     parser.add_argument('--vep_ht_path', type=str, required=True, help='Path to the VEP Hail Table file')
     parser.add_argument('--checkpoint_prefix', type=str, default=None, help='Prefix for checkpoint files')
-    parser.add_argument(
-        '--init_batch_args',
-        type=str,
-        default=None,
-        help='Arguments to pass to init_batch, e.g. --init_batch_args "worker_memory=highmem"',
-    )
     parser.add_argument('--remove_invalid_contigs', action='store_true', default=False,
                         help='Whether to remove invalid contigs from the Matrix Table')
 
@@ -194,7 +187,6 @@ def cli_main():
         out_mt_path=args.out_mt_path,
         vep_ht_path=args.vep_ht_path,
         checkpoint_prefix=args.checkpoint_prefix,
-        init_batch_args=args.init_batch_args,
         remove_invalid_contigs=args.remove_invalid_contigs,
     )
 

@@ -5,12 +5,12 @@ from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
-from lrs_annotation.scripts.snps_indels import vcf_to_annotate_cohort_mt
+from lrs_annotation.scripts.svs import vcf_to_annotate_cohort_mt
 
-def annotate_cohort_jobs_snps_indels(
+def annotate_cohort_jobs_svs(
     vcf_path: Path,
     out_mt_path: Path,
-    vep_ht_path: Path,
+    gencode_gz_path: Path,
     checkpoint_prefix: Path,
     job_attrs: dict | None = None,
 ) -> Job:
@@ -24,9 +24,8 @@ def annotate_cohort_jobs_snps_indels(
         python3 {vcf_to_annotate_cohort_mt.__file__} \\
             --vcf_path {vcf_path} \\
             --out_mt_path {out_mt_path} \\
-            --vep_ht_path {vep_ht_path} \\
-            --checkpoint_prefix {checkpoint_prefix} \\
-            --remove_invalid_contigs \
+            --gencode_gz {gencode_gz_path} \\
+            --checkpoint_prefix {checkpoint_prefix} \
         """
     )
     return j

@@ -4,11 +4,11 @@ from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
-from lrs_annotation.scripts.snps_indels import annotate_dataset_mt
 from lrs_annotation.scripts import subset_mt_to_sgs
+from lrs_annotation.scripts.svs import annotate_dataset_mt
 
 
-def annotate_dataset_jobs(
+def annotate_dataset_jobs_sv(
     mt_path: Path,
     sequencing_group_ids: list[str],
     out_mt_path: Path,

@@ -95,17 +95,13 @@ def gather_vep_json_to_ht(
     Parse results from VEP with annotations formatted in JSON,
     and write into a Hail Table using a Batch job.
     """
-
-    vep_version = config_retrieve(['workflow', 'vep_version'])
-
     j = b.new_job('VEP', job_attrs)
     j.image(config_retrieve(['workflow', 'driver_image']))
     j.command(
         f"""
         python3 {vep_json_to_ht.__file__} \\
         --vep_results_paths {' '.join(map(str, vep_results_paths))} \
-        --out_path {out_path} \\
-        --vep_version {vep_version}
+        --out_path {out_path}
         """
     )
     return j
@@ -124,16 +120,12 @@ def vep_one(
     if out_path and can_reuse(out_path):
         return None
 
-    vep_version = config_retrieve(['workflow', 'vep_version'])
-    if not vep_version:
-        raise IndexError('No VEP version specified in config.workflow.vep_version')
-
-    # check that the cache and image for this version exist
-    vep_image = config_retrieve(['images', f'vep_{vep_version}'])
-    vep_mount_path = to_path(reference_path(f'vep_{vep_version}_mount'))
+    # check that the cache and image for VEP 110 exist
+    vep_image = config_retrieve(['images', 'vep_110'])
+    vep_mount_path = to_path(reference_path('vep_110_mount'))
     assert all([vep_image, vep_mount_path])
 
-    j = b.new_job('VEP', (job_attrs or {}) | {'tool': f'VEP {vep_version}'})
+    j = b.new_job('VEP', (job_attrs or {}) | {'tool': 'VEP 110'})
     j.image(vep_image)
 
     # vep is single threaded, with a middling memory requirement
@@ -161,10 +153,10 @@ def vep_one(
         'gerp_bigwig': f'{vep_dir}/gerp_conservation_scores.homo_sapiens.GRCh38.bw',
         'human_ancestor_fa': f'{vep_dir}/human_ancestor.fa.gz',
         'conservation_file': f'{vep_dir}/loftee.sql',
-        'loftee_path': ('$MAMBA_ROOT_PREFIX/share/ensembl-vep' if vep_version == '105' else '$VEP_DIR_PLUGINS'),
+        'loftee_path': '$VEP_DIR_PLUGINS',
     }
 
-    # sexy new plugin - only present in 110 build
+    # plugin only present in VEP 110 build
     alpha_missense_plugin = f'--plugin AlphaMissense,file={vep_dir}/AlphaMissense_hg38.tsv.gz '
 
     # VCF annotation doesn't utilise the aggregated Seqr reference data, including spliceAI
@@ -175,12 +167,9 @@ def vep_one(
             f'--plugin SpliceAI,snv={vep_dir}/spliceai_scores.raw.snv.hg38.vcf.gz,'
             f'indel={vep_dir}/spliceai_scores.raw.indel.hg38.vcf.gz '
         )
-        if (use_splice_ai and vep_version == '110' and out_format == 'vcf')
+        if (use_splice_ai and out_format == 'vcf')
         else ''
     )
-
-    # VEP 105 installs plugins in non-standard locations
-    loftee_plugin_path = '--dir_plugins $MAMBA_ROOT_PREFIX/share/ensembl-vep '
 
     cmd = f"""
     set -x
@@ -197,7 +186,7 @@ def vep_one(
     --cache --offline --assembly GRCh38 \\
     --dir_cache {vep_dir}/vep/ \\
     --fasta /cpg-common-main/references/vep/110/mount/vep/homo_sapiens/110/Homo_sapiens.GRCh38.dna.toplevel.fa.gz \\
-    {loftee_plugin_path if vep_version == '105' else alpha_missense_plugin} \\
+    {alpha_missense_plugin} \\
     --plugin LoF,{','.join(f'{k}:{v}' for k, v in loftee_conf.items())} \\
     --plugin UTRAnnotator,file=$UTR38 {vcf_plugins}
     """

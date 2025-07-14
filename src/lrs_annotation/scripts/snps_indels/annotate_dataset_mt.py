@@ -3,13 +3,13 @@ from argparse import ArgumentParser
 
 from loguru import logger
 from cpg_utils.hail_batch import init_batch
-
+from lrs_annotation.utils import get_init_batch_args_for_job
 
 def annotate_dataset_mt(mt_path: str, out_mt_path: str):
     """
     Add dataset-level annotations.
     """
-    init_batch()
+    init_batch(**get_init_batch_args_for_job('annotate_dataset_snps_indels'))
     mt = hl.read_matrix_table(mt_path)
 
     # Convert the mt genotype entries into num_alt, gq, ab, dp, and sample_id.

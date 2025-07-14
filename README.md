@@ -34,8 +34,8 @@ src
 │   │   │   └── AnnotateDatasetMatrixtable.py
 │   │   │   └── ...
 │   │   └── svs
-│   │   │   ├── AnnotateSVsCohortMatrixtable.py
-│   │   │   └── AnnotateSVsDatasetMatrixtable.py
+│   │   │   ├── AnnotateCohortMatrixtable.py
+│   │   │   └── AnnotateDatasetMatrixtable.py
 │   │   │   └── ...
 │   ├── scripts
 │   │   ├── snps_indels

@@ -18,11 +18,10 @@ from cpg_flow.workflow import (
 from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
 from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
-from jobs.snps_indels.ExportMtToElastic import export_snps_indels_mt_to_elastic
 from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
 from jobs.snps_indels.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
 from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
-
+from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from inputs import (
     query_for_lrs_vcfs,
     query_for_lrs_mappings
@@ -47,7 +46,7 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
 
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
-            'lrs_sgid_mapping': self.prefix / 'lrs_sgid_mapping.txt',
+            'lrs_sg_id_mapping': self.prefix / 'lrs_sg_id_mapping.txt',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
@@ -55,19 +54,17 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         Write the LRS ID to SG ID mapping to a file
         This is used by bcftools reheader to update the sample IDs in the VCFs
         """
+        outputs = self.expected_outputs(multicohort)
+        mapping_file_path = outputs['lrs_sg_id_mapping']
+
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
             sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False)
         )
-
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
-        mapping_file_path = self.prefix / 'lrs_sgid_mapping.txt'
 
         logger.info(f'Writing LRS ID to SG ID mapping to {mapping_file_path}')
-        write_mapping_to_file(
-            mapping=lrs_sg_id_mapping,
-            output_path=mapping_file_path,
-        )
+        write_mapping_to_file(lrs_sg_id_mapping, mapping_file_path)
 
         return self.make_outputs(multicohort, data=self.expected_outputs(multicohort))
 
@@ -79,7 +76,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.prefix() / 'long_read' / 'reformatted_vcfs'
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'reformatted_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.gz',
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted_snps_indels.vcf.gz.tbi',
@@ -98,13 +95,10 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 
-        # Input VCF
+        # Input VCF and reheadering file
         vcf_path: str = sg_vcfs[sg.id]['vcf']
+        lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sg_id_mapping')
 
-        # Required file for reheadering
-        lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sgid_mapping')
-
-        # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
         reformatting_job = reformat_snps_indels_vcf_with_bcftools(
             batch=get_batch(),
             job_name=f'Reformat SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{vcf_path}',
@@ -120,22 +114,22 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
 
 
 @stage.stage(required_stages=ReformatSnpsIndelsVcfWithBcftools)
-class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
+class MergeVcfsWithBcftools(stage.MultiCohortStage):
     """
-    Find all the reformatted VCFs and merge them together with bcftools
+    Merge the reformatted SNPs Indels VCFs together with bcftools
     """
 
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
-            'vcf': self.prefix / 'merged_reformatted_snps_indels.vcf.gz',
-            'index': self.prefix / 'merged_reformatted_snps_indels.vcf.gz.tbi',
+            'vcf': self.tmp_prefix / 'merged_reformatted_snps_indels.vcf.gz',
+            'index': self.tmp_prefix / 'merged_reformatted_snps_indels.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
-        # Get the reformatted VCFs
+        # Get the reformatted VCFs from the previous stage
         reformatted_vcfs = inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
@@ -159,8 +153,8 @@ class MergeReformattedSnpsIndelsVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[ReformatSnpsIndelsVcfWithBcftools, MergeReformattedSnpsIndelsVcfsWithBcftools])
-class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
+@stage.stage(required_stages=[ReformatSnpsIndelsVcfWithBcftools, MergeVcfsWithBcftools])
+class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
     """
     Get the site-only VCFs from the merged VCF by splitting the VCF with GATK SelectVariants,
     then extracting the sites-only VCFs for VEP annotation.
@@ -171,8 +165,8 @@ class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
         Generate site-only VCFs from the merged VCF.
         """
         return {
-            'siteonly': to_path(self.prefix / 'siteonly.vcf.gz'),
-            'siteonly_part_pattern': str(self.prefix / 'siteonly_parts' / 'part{idx}.vcf.gz'),
+            'siteonly': to_path(self.tmp_prefix / 'siteonly.vcf.gz'),
+            'siteonly_part_pattern': str(self.tmp_prefix / 'siteonly_parts' / 'part{idx}.vcf.gz'),
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -197,7 +191,7 @@ class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
         if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
             merged_vcf_path = inputs.as_path(multicohort, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
         else:
-            merged_vcf_path = inputs.as_path(multicohort, MergeReformattedSnpsIndelsVcfsWithBcftools, 'vcf')
+            merged_vcf_path = inputs.as_path(multicohort, MergeVcfsWithBcftools, 'vcf')
 
         vcf_jobs = split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
             b=get_batch(),
@@ -214,7 +208,7 @@ class SplitMergedVcfIntoSitesOnlyVcfsWithGatk(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=[SplitMergedVcfIntoSitesOnlyVcfsWithGatk])
+@stage.stage(required_stages=[SplitVcfIntoSitesOnlyWithGatk])
 class VepLongReadAnnotation(stage.MultiCohortStage):
     """
     Run VEP on the long-read site-only VCFs and write out a Hail table.
@@ -224,7 +218,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         """
         Expected to write a hail table.
         """
-        return {'ht': self.prefix / 'long_read' / 'vep.ht'}
+        return {'ht': self.tmp_prefix / 'long_read' / 'vep.ht'}
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -235,7 +229,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         input_siteonly_vcf_part_paths = [
             to_path(
                 inputs.as_str(
-                    stage=SplitMergedVcfIntoSitesOnlyVcfsWithGatk,
+                    stage=SplitVcfIntoSitesOnlyWithGatk,
                     target=multicohort,
                     key='siteonly_part_pattern',
                 ).format(idx=idx),
@@ -256,10 +250,10 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
 
 @stage.stage(required_stages=[
     ReformatSnpsIndelsVcfWithBcftools,
-    MergeReformattedSnpsIndelsVcfsWithBcftools,
+    MergeVcfsWithBcftools,
     VepLongReadAnnotation]
 )
-class AnnotateCohortLongReadSnpsIndelsWithHail(stage.MultiCohortStage):
+class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
     """
     First step to transform annotated SNPs Indels callset data into a seqr ready format
     """
@@ -268,7 +262,7 @@ class AnnotateCohortLongReadSnpsIndelsWithHail(stage.MultiCohortStage):
         """
         Expected to write a matrix table.
         """
-        return {'mt': self.prefix / 'cohort_snps_indels.mt'}
+        return {'mt': self.tmp_prefix / 'cohort_snps_indels.mt'}
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -279,7 +273,7 @@ class AnnotateCohortLongReadSnpsIndelsWithHail(stage.MultiCohortStage):
         if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
             vcf_path = inputs.as_path(multicohort, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
         else:
-            vcf_path = inputs.as_path(target=multicohort, stage=MergeReformattedSnpsIndelsVcfsWithBcftools, key='vcf')
+            vcf_path = inputs.as_path(target=multicohort, stage=MergeVcfsWithBcftools, key='vcf')
 
         vep_ht_path = inputs.as_path(target=multicohort, stage=VepLongReadAnnotation, key='ht')
 
@@ -294,17 +288,20 @@ class AnnotateCohortLongReadSnpsIndelsWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage.stage(required_stages=[AnnotateCohortLongReadSnpsIndelsWithHail], analysis_type='custom', analysis_keys=['mt'])
-class SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail(stage.DatasetStage):
+@stage.stage(
+    required_stages=[AnnotateCohortMtFromVcfWithHail],
+    analysis_type='matrixtable',
+    analysis_keys=['mt']
+)
+class SubsetMtToDatasetWithHail(stage.DatasetStage):
     """
-    Subset the MT to be this Dataset only
+    Subset the multicohort Matrixtable to a single dataset
     """
 
     def expected_outputs(self, dataset: targets.Dataset) -> dict:
         """
         Expected to generate a matrix table
         """
-
         return {
             'mt': (dataset.prefix() / 'mt' / f'LongReadSNPsIndels-{get_workflow().output_version}-{dataset.name}.mt'),
         }
@@ -318,7 +315,7 @@ class SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail(stage.DatasetSta
             dataset (Dataset): SGIDs specific to this dataset/project
             inputs ():
         """
-        mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortLongReadSnpsIndelsWithHail, key='mt')
+        mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
         outputs = self.expected_outputs(dataset)
 
@@ -336,12 +333,12 @@ class SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail(stage.DatasetSta
 
 
 @stage.stage(
-    required_stages=[SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail],
+    required_stages=[SubsetMtToDatasetWithHail],
     analysis_type='es-index',
     analysis_keys=['index_name'],
     update_analysis_meta=lambda x: {'seqr-dataset-type': 'SNV_INDEL'},  # noqa: ARG005
 )
-class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
+class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
     """
     Create a Seqr index
     https://github.com/populationgenomics/metamist/issues/539
@@ -352,7 +349,7 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
         Expected to generate a Seqr index, which is not a file
         """
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
-        index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{get_workflow().run_timestamp}'.lower()
+        index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{get_workflow().output_version}'.lower()
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'es' / f'{index_name}.done',
@@ -366,7 +363,7 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
         # try to generate a password here - we'll find out inside the script anyway, but
         # by that point we'd already have localised the MT, wasting time and money
         try:
-            _es_password_string = es_password()
+            es_password()
         except PermissionDenied:
             logger.warning(f'No permission to access ES password, skipping for {dataset}')
             return self.make_outputs(dataset)
@@ -378,7 +375,7 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
 
         # get the absolute path to the MT
         mt_path = str(
-            inputs.as_path(target=dataset, stage=SubsetAnnotateCohortLongReadSnpsIndelsMtToDatasetWithHail, key='mt')
+            inputs.as_path(target=dataset, stage=SubsetMtToDatasetWithHail, key='mt')
         )
 
         # get the expected outputs as Strings
@@ -392,7 +389,7 @@ class ExportLongReadSnpsIndelsMtToElasticIndex(stage.DatasetStage):
             cohort_size=len(dataset.get_sequencing_group_ids()),
         )
         # set all job attributes in one bash
-        job = export_snps_indels_mt_to_elastic(
+        job = export_mt_to_elasticsearch(
             batch=get_batch(),
             mt_path=mt_path,
             index_name=index_name,
