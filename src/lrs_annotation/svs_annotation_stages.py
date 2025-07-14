@@ -201,24 +201,28 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
+        sg_vcfs: dict[str, Path] = {}
+        for dataset in multicohort.get_datasets():
+            sg_vcfs |= query_for_lrs_vcfs(dataset.name)
         # Get the reformatted VCFs from the previous stage
         reformatted_vcfs = inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)
+        reformatted_vcfs = {
+            sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sg_vcfs
+        }
+
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
             return None
 
-        batch_vcfs = [
-            get_batch().read_input_group(**{'vcf.gz': each_vcf, 'vcf.gz.tbi': f'{each_vcf}.tbi'})['vcf.gz']
-            for each_vcf in [
-                str(reformatted_vcfs.get(sgid, {}).get('vcf'))
-                for sgid in multicohort.get_sequencing_group_ids()
-                if sgid in reformatted_vcfs
-            ]
+        vcf_paths = [
+            str(reformatted_vcfs.get(sgid, {}).get('vcf'))
+            for sgid in multicohort.get_sequencing_group_ids()
+            if sgid in reformatted_vcfs
         ]
 
         merge_job = merge_svs_vcf_with_bcftools(
             batch=get_batch(),
-            vcf_paths=batch_vcfs,
+            vcf_paths=vcf_paths,
             job_attrs={'tool': 'bcftools'}
         )
 
