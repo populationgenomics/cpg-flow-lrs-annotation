@@ -147,7 +147,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
 
 
 @stage.stage(required_stages=ModifySVsVcfWithSniffles)
-class ReformatSVsVcfWithBcftools(stage.MultiCohortStage):
+class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
     """
     Reformat the Sniffles-modified long-read SV VCFs using BCFtools
     """
@@ -164,10 +164,11 @@ class ReformatSVsVcfWithBcftools(stage.MultiCohortStage):
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         """
-        reformatted_vcfs = inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)
-        if sg.id not in reformatted_vcfs:
+        sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        if sg.id not in sg_vcfs:
             return None
 
+        reformatted_vcfs = inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)
         # Input VCF and reheadering file
         vcf_path: str = reformatted_vcfs[sg.id]['vcf']
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_sg_id_mapping')

@@ -1,8 +1,6 @@
 [workflow]
 name = 'snps_indels_annotation'
 
-ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
-
 [workflow.query_filters]
 # sequencing_types = [ 'genome', 'adaptive_sampling', ]
 # analysis_types = [ 'vcf', 'pacbio_vcf',]

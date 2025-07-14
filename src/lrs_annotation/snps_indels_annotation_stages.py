@@ -180,7 +180,6 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
         """
         Submit jobs.
         """
-        jobs = []
         outputs = self.expected_outputs(multicohort)
         scatter_count = joint_calling_scatter_count(len(multicohort.get_sequencing_groups()))
         out_siteonly_vcf_part_paths = [
@@ -210,9 +209,8 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
             exclude_intervals_path=exclude_intervals_path,
             job_attrs=self.get_job_attrs(),
         )
-        jobs.extend(vcf_jobs)
 
-        return self.make_outputs(multicohort, data=outputs, jobs=jobs)
+        return self.make_outputs(multicohort, data=outputs, jobs=vcf_jobs)
 
 
 @stage.stage(required_stages=[SplitVcfIntoSitesOnlyWithGatk])
