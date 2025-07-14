@@ -131,7 +131,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         """
         sg_vcfs: dict[str, Path] = {}
         for dataset in multicohort.get_datasets():
-            sg_vcfs |= query_for_lrs_vcfs(dataset.name)
+            sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset.name))
         # Get the reformatted VCFs from the previous stage
         reformatted_vcfs = inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)
         reformatted_vcfs = {
