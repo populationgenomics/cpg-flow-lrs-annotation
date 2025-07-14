@@ -90,7 +90,7 @@ def cli_main():
     )
     args = parser.parse_args()
     modify_sniffles_vcf(
-        file_in=args.vcf_in,
+        file_in=args.vcf_path,
         file_out=args.vcf_out,
         fa=args.fa,
         sex_mapping_file=args.sex_mapping_file,

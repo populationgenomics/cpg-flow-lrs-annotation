@@ -28,7 +28,7 @@ def sniffles_modify_vcf(
     j.command(
         f"""
         python3 {sniffles_vcf_modifier.__file__} \\
-            --vcf_in {vcf} \\
+            --vcf_path {vcf} \\
             --vcf_out {j.vcf_out} \\
             --fa {fasta} \\
             --sex_mapping_file {sex_mapping}
