@@ -22,6 +22,9 @@ def sniffles_modify_vcf(
     vcf = get_batch().read_input(vcf_path)
     fasta = get_batch().read_input_group(**{'fa': ref_fa_path, 'fa.fai': f'{ref_fa_path}.fai'})['fa']
     sex_mapping = get_batch().read_input(sex_mapping_file_path)
+    j.declare_resource_group(
+        vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
+    )
 
     j.image(config_retrieve(['workflow', 'driver_image']))
     j.storage('10Gi')
@@ -29,7 +32,7 @@ def sniffles_modify_vcf(
         f"""
         python3 {sniffles_vcf_modifier.__file__} \\
             --vcf_path {vcf} \\
-            --vcf_out {j.vcf_out} \\
+            --vcf_out {j.vcf_out["vcf.gz"]} \\
             --fa {fasta} \\
             --sex_mapping_file {sex_mapping}
         """
