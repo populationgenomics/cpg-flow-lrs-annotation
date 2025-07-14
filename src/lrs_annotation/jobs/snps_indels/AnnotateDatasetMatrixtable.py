@@ -10,7 +10,7 @@ from lrs_annotation.scripts import subset_mt_to_sgs
 
 def annotate_dataset_jobs(
     mt_path: Path,
-    sequencing_group_ids: list[str],
+    sg_ids: list[str],
     out_mt_path: Path,
     tmp_prefix: Path,
     job_attrs: dict | None = None,
@@ -23,18 +23,18 @@ def annotate_dataset_jobs(
     sample_ids_list_path = tmp_prefix / 'sample-list.txt'
     if not config_retrieve(['workflow', 'dry_run'], default=False):
         with sample_ids_list_path.open('w') as f:
-            f.write(','.join(sequencing_group_ids))
+            f.write(','.join(sg_ids))
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 
     subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
     subset_j.image(config_retrieve(['workflow', 'driver_image']))
-    assert sequencing_group_ids
+    assert sg_ids
     subset_j.command(
         f"""
         python3 {subset_mt_to_sgs.__file__} \\
             --mt_path {mt_path} \\
-            --sg_ids {','.join(sequencing_group_ids)} \\
+            --sg_ids {','.join(sg_ids)} \\
             --out_mt_path {subset_mt_path}
         """
     )

@@ -328,7 +328,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
 
         jobs = annotate_dataset_jobs(
             mt_path=mt_path,
-            sequencing_group_ids=dataset.get_sequencing_group_ids(),
+            sg_ids=dataset.get_sequencing_group_ids(),
             out_mt_path=outputs['mt'],
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
