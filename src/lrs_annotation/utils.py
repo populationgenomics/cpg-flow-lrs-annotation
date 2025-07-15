@@ -1,6 +1,7 @@
 """
 Utility methods used across the workflows
 """
+import hashlib
 from hailtop.batch.job import BashJob
 from enum import Enum
 from cpg_utils import Path
@@ -61,6 +62,16 @@ def get_query_filter_from_config(field_name: str, make_tuple = True) -> tuple[st
             return list(values)
         return tuple(values)
     return None
+
+
+def get_sg_hash(sequencing_group_ids: list[str]) -> str:
+    """
+    Unique hash string of sequencing group IDs
+    """
+    s = ' '.join(sorted(sequencing_group_ids))
+    # use a short hash to avoid exceeding the 38 character limit for Hail Batch job
+    h = hashlib.sha256(s.encode()).hexdigest()[:38]
+    return f'{h}_{len(sequencing_group_ids)}'
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:

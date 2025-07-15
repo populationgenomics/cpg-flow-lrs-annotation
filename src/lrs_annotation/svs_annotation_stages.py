@@ -10,10 +10,7 @@ from cpg_utils.hail_batch import get_batch
 
 from cpg_flow import stage, targets
 from cpg_flow.utils import tshirt_mt_sizing
-from cpg_flow.workflow import (
-    get_multicohort,
-    get_workflow,
-)
+from cpg_flow.workflow import get_multicohort
 
 from jobs.svs.SnifflesModifyVcf import sniffles_modify_vcf
 from jobs.svs.AnnotateCohortMatrixtable import annotate_cohort_jobs_svs
@@ -35,6 +32,7 @@ from utils import (
     get_dataset_name,
     get_dataset_names,
     get_query_filter_from_config,
+    get_sg_hash,
     write_mapping_to_file,
     es_password,
 )
@@ -106,7 +104,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
     - This is explicitly skipped for the parents in trio joint-called VCFs
     """
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'sniffles_vcfs'
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'svs' / 'sniffles_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_sniffles_modified_svs.vcf.gz',
         }
@@ -151,7 +149,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
     Reformat the Sniffles-modified long-read SV VCFs using BCFtools
     """
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'reformatted_vcfs'
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'long_read' / 'svs' /  'reformatted_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted_svs.vcf.gz',
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted_svs.vcf.gz.tbi',
@@ -191,9 +189,13 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
     Merge the reformatted SVs VCFs together with bcftools
     """
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
+        sg_vcfs: dict[str, Path] = {}
+        for dataset in multicohort.get_datasets():
+            sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset.name))
+        sg_hash = get_sg_hash(list(sg_vcfs.keys()))
         return {
-            'vcf': self.tmp_prefix / 'merged_reformatted_svs.vcf.gz',
-            'index': self.tmp_prefix / 'merged_reformatted_svs.vcf.gz.tbi',
+            'vcf': self.tmp_prefix / sg_hash / 'merged_reformatted_svs.vcf.gz',
+            'index': self.tmp_prefix / sg_hash / 'merged_reformatted_svs.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -241,9 +243,13 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
     Annotates the merged long-read SVs VCF with GATK-SV.
     """
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
+        sg_vcfs: dict[str, Path] = {}
+        for dataset in multicohort.get_datasets():
+            sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset.name))
+        sg_hash = get_sg_hash(list(sg_vcfs.keys()))
         return {
-            'annotated_vcf': self.tmp_prefix / 'annotated_long_read_svs.vcf.gz',
-            'annotated_vcf_index': self.tmp_prefix / 'annotated_long_read_svs.vcf.gz.tbi',
+            'annotated_vcf': self.tmp_prefix / sg_hash / 'annotated_long_read_svs.vcf.gz',
+            'annotated_vcf_index': self.tmp_prefix / sg_hash / 'annotated_long_read_svs.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
@@ -271,9 +277,13 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
     Annotate the long-read SVs VCF with STRVCTVRE.
     """
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
+        sg_vcfs: dict[str, Path] = {}
+        for dataset in multicohort.get_datasets():
+            sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset.name))
+        sg_hash = get_sg_hash(list(sg_vcfs.keys()))
         return {
-            'strvctvre_vcf': self.tmp_prefix / 'strvctvre_annotated.vcf.gz',
-            'strvctvre_vcf_index': self.tmp_prefix / 'strvctvre_annotated.vcf.gz.tbi',
+            'strvctvre_vcf': self.tmp_prefix / sg_hash / 'strvctvre_annotated.vcf.gz',
+            'strvctvre_vcf_index': self.tmp_prefix / sg_hash / 'strvctvre_annotated.vcf.gz.tbi',
         }
 
     def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -338,8 +348,8 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         """
         Expected to generate a matrix table
         """
-
-        return {'mt': (dataset.prefix() / 'mt' / f'LongReadSV-{get_workflow().output_version}-{dataset.name}.mt')}
+        sg_hash = get_sg_hash(list(query_for_lrs_vcfs(get_dataset_name(dataset.name)).keys()))
+        return {'mt': (dataset.prefix() / 'mt' / f'LongReadSV-{sg_hash}-{dataset.name}.mt')}
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -383,8 +393,9 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         """
         Expected to generate a Seqr index, which is not a file
         """
+        sg_hash = get_sg_hash(list(query_for_lrs_vcfs(get_dataset_name(dataset.name)).keys()))
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
-        index_name = f'{dataset.name}-{sequencing_type}-LR-SV-{get_workflow().output_version}'.lower()
+        index_name = f'{dataset.name}-{sequencing_type}-LR-SV-{sg_hash}'.lower()
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'es' / f'{index_name}.done',

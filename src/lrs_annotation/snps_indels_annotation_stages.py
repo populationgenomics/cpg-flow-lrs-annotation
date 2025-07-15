@@ -10,10 +10,7 @@ from cpg_utils.hail_batch import get_batch
 
 from cpg_flow import stage, targets
 from cpg_flow.utils import tshirt_mt_sizing
-from cpg_flow.workflow import (
-    get_multicohort,
-    get_workflow,
-)
+from cpg_flow.workflow import get_multicohort
 
 from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
@@ -31,6 +28,7 @@ from utils import (
     get_dataset_name,
     get_dataset_names,
     get_query_filter_from_config,
+    get_sg_hash,
     write_mapping_to_file,
     joint_calling_scatter_count,
     es_password,
@@ -307,8 +305,9 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         """
         Expected to generate a matrix table
         """
+        sg_hash = get_sg_hash(list(query_for_lrs_vcfs(get_dataset_name(dataset.name)).keys()))
         return {
-            'mt': (dataset.prefix() / 'mt' / f'LongReadSNPsIndels-{get_workflow().output_version}-{dataset.name}.mt'),
+            'mt': (dataset.prefix() / 'mt' / f'LongReadSNPsIndels-{sg_hash}-{dataset.name}.mt'),
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -353,8 +352,9 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         """
         Expected to generate a Seqr index, which is not a file
         """
+        sg_hash = get_sg_hash(list(query_for_lrs_vcfs(get_dataset_name(dataset.name)).keys()))
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
-        index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{get_workflow().output_version}'.lower()
+        index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{sg_hash}'.lower()
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'es' / f'{index_name}.done',
