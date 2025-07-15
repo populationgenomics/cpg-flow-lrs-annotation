@@ -74,6 +74,10 @@ def annotate_cohort(
     ref_ht = hl.read_table(reference_path('seqr_combined_reference_data'))
     clinvar_ht = hl.read_table(reference_path('seqr_clinvar'))
 
+    # If the 'AF' field is already in the entries, we should drop it
+    if 'AF' in list(mt.entry):
+        logging.info('AF field already present in the entries, dropping it')
+        mt = mt.drop('AF')
     logging.info('Annotating with seqr-loader fields: round 1')
 
     logging.info('Annotating with clinvar and munging annotation fields')
