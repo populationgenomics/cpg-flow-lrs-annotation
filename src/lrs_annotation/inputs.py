@@ -9,6 +9,8 @@ from cpg_utils.config import config_retrieve
 
 from metamist.graphql import gql, query
 
+from .utils import get_dataset_name
+
 VCF_QUERY = gql(
     """
     query MyQuery($dataset: String!, $seqTypes: [String!], $analysisTypes: [String!], $metaFilter: JSON) {
@@ -240,3 +242,14 @@ def query_for_lrs_mappings(
                 continue
             lrs_mappings[lrs_id] = {'sg_id': sg['id'], 'sex': participant['reportedSex']}
     return lrs_mappings
+
+
+def get_sgs_from_datasets(multicohort_datasets: list[str]) -> list[str]:
+    """
+    Returns the sequencing group IDs from multicohort datasets, filtered to the
+    sequencing groups that are actually present in the workflow run.
+    """
+    sg_vcfs: dict = {}
+    for dataset in multicohort_datasets:
+        sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset))
+    return list(sg_vcfs.keys())

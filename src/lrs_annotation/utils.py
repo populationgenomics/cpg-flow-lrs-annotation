@@ -67,6 +67,8 @@ def get_query_filter_from_config(field_name: str, make_tuple = True) -> tuple[st
 def get_sg_hash(sequencing_group_ids: list[str]) -> str:
     """
     Unique hash string of sequencing group IDs
+    Reimplemented from CPG flow core for use with LRS annotation pipeline, which sometimes
+    uses subsets of sequencing groups in a given multicohort.
     """
     s = ' '.join(sorted(sequencing_group_ids))
     # use a short hash to avoid exceeding the 38 character limit for Hail Batch job
