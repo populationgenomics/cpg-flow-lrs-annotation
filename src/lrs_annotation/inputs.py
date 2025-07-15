@@ -9,7 +9,7 @@ from cpg_utils.config import config_retrieve
 
 from metamist.graphql import gql, query
 
-from .utils import get_dataset_name
+from utils import get_dataset_name
 
 VCF_QUERY = gql(
     """
