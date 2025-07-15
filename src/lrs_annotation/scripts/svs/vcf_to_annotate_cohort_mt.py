@@ -166,7 +166,7 @@ def parse_gtf_from_local(gtf_path: str, chunk_size: int | None = None) -> hl.dic
     return [hl.literal(each_dict) for each_dict in sub_dictionaries]
 
 
-def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpoint: str | None = None):
+def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpoint_prefix: str | None = None):
     """
     Translate an annotated SV VCF into a Seqr-ready format
     Relevant gCNV specific schema
@@ -265,8 +265,8 @@ def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpo
         mt = mt.annotate_rows(info=mt.info.annotate(CPX_TYPE=mt.sv_types[0]))
 
     # save those changes
-    if checkpoint:
-        mt = mt.checkpoint(join(checkpoint, 'initial_annotation_round.mt'))
+    if checkpoint_prefix:
+        mt = mt.checkpoint(join(checkpoint_prefix, 'initial_annotation_round.mt'))
 
     # get the Gene-Symbol mapping dict
     gene_id_mapping = parse_gtf_from_local(gencode_gz)[0]
