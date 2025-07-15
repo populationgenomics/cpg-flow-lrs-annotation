@@ -235,7 +235,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
     WriteCleanedPedFile,
     ModifySVsVcfWithSniffles,
     ReformatSVsVcfWithBcftools,
-    MergeSVsVcfsWithBcftools], analysis_type='sv', analysis_keys=['annotated_vcf'])
+    MergeSVsVcfsWithBcftools])
 class AnnotateSVsWithGatk(stage.MultiCohortStage):
     """
     Annotates the merged long-read SVs VCF with GATK-SV.
