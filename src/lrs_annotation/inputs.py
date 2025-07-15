@@ -100,7 +100,7 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
 @cache
 def query_for_lrs_vcfs(
     dataset_name: str
-) -> dict[str, dict]:
+) -> dict[str, dict | list[str]]:
     """
     Query metamist for the long-read sequencing VCFs. The VCFs are filtered by the values specified in
     the workflow.query_filters config dictionary, using the analysis.meta field.
@@ -120,7 +120,7 @@ def query_for_lrs_vcfs(
         dataset_name (str): the name of the dataset
 
     Returns:
-        a dictionary of the SG IDs and their corresponding VCFs
+        a dictionary of the SG IDs and their corresponding VCFs, and a list of the SG IDs in the workflow run.
     """
     query_filters: dict = config_retrieve(['workflow', 'query_filters'], default={})
     if not query_filters:
@@ -170,7 +170,10 @@ def query_for_lrs_vcfs(
         )
     if not query_filters.get('prefer_joint_called', False):
         # If we are not preferring joint-called VCFs, just return the single-sample VCFs
-        return single_sample_vcfs
+        return {
+            'sg_ids': list(single_sample_vcfs.keys()),
+            'vcfs': single_sample_vcfs,
+        }
 
     # If joint_called is True, we need to query for the joint-called trio VCFs
     # and prefer them over the single-sample VCFs of parents in joint-called trios
@@ -218,7 +221,13 @@ def query_for_lrs_vcfs(
             continue
         vcfs_for_sgs[sg_id] = vcf_analysis
 
-    return vcfs_for_sgs
+    return {
+        # SG IDs include the skipped parental ones, so that we can still
+        # reference them in the workflow, but the vcfs dict only contains
+        # the VCFs that are not skipped.
+        'sg_ids': list(vcfs_for_sgs.keys()) + list(sgs_to_skip),
+        'vcfs': vcfs_for_sgs,
+    }
 
 
 def query_for_lrs_mappings(
@@ -249,7 +258,7 @@ def get_sgs_from_datasets(multicohort_datasets: list[str]) -> list[str]:
     Returns the sequencing group IDs from multicohort datasets, filtered to the
     sequencing groups that are actually present in the workflow run.
     """
-    sg_vcfs: dict = {}
+    sgs: list[str] = []
     for dataset in multicohort_datasets:
-        sg_vcfs |= query_for_lrs_vcfs(get_dataset_name(dataset))
-    return list(sg_vcfs.keys())
+        sgs.extend(query_for_lrs_vcfs(get_dataset_name(dataset))['sg_ids'])
+    return sgs

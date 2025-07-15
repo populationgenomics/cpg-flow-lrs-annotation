@@ -88,9 +88,10 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
-        sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
-        if sg.id not in sg_vcfs:
+        sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        if sg.id not in sgs['sg_ids']:
             return None
+        sg_vcfs = sgs['vcfs']
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 

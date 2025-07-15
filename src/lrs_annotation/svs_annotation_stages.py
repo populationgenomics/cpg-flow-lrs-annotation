@@ -118,11 +118,10 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         - Add a CN field to the FORMAT field, filled with copy number values based on the genotype and sex
         - Adds a unique ID to each record for compatitbility with GATK SV sorting
         """
-        sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
-        if sg.id not in sg_vcfs:
+        sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        if sg.id not in sgs['sg_ids']:
             return None
-
-        expected_outputs = self.expected_outputs(sg)
+        sg_vcfs = sgs['vcfs']
 
         vcf_path: str = sg_vcfs[sg.id]['vcf']
         lrs_id_sex_map = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_id_sex_mapping')
@@ -139,6 +138,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         )
 
         # write from temp storage into GCP
+        expected_outputs = self.expected_outputs(sg)
         get_batch().write_output(mod_job.vcf_out, str(expected_outputs['vcf']).removesuffix('.vcf.gz'))
 
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
@@ -162,8 +162,8 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         """
-        sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
-        if sg.id not in sg_vcfs:
+        sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        if sg.id not in sgs['sg_ids']:
             return None
 
         # Input VCF and reheadering file
