@@ -15,7 +15,7 @@ def bam_to_cram(
     b: Batch,
     input_bam: ResourceGroup,
     job_attrs: dict | None = None,
-) -> tuple[Job, ResourceGroup]:
+) -> Job:
     """
     Convert a BAM file to a CRAM file.
     """
@@ -56,4 +56,4 @@ def bam_to_cram(
     """
     j.command(command(cmd, monitor_space=True))
 
-    return j, j.sorted_cram
+    return j
