@@ -114,3 +114,4 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 ## - we don't need generic cpg-flow arguments for every Stage, but need to fit the required method signature
 "src/lrs_annotation/snps_indels_annotation_stages.py" = ["ARG002"]
 "src/lrs_annotation/svs_annotation_stages.py" = ["ARG002"]
+"src/lrs_annotation/bam_to_cram_stages.py" = ["ARG002"]
