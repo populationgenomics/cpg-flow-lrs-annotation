@@ -4,11 +4,13 @@ A CPG workflow for creating annotated callsets from long read data, using the [c
 
 ## Purpose
 
-This workflow is designed to process long-read sequencing data and create callsets compatible with [seqr](https://github.com/populationgenomics/seqr). It automates the steps required to query, reformat, annotate, and export VCF files derived from long-read sequencing.
+This workflow is designed to process long-read sequencing data and create callsets compatible with [seqr](https://github.com/populationgenomics/seqr). It automates the steps required to query, reformat, annotate, and export VCF files derived from long-read sequencing. It also supports the conversion of BAM files to CRAMs.
 
 It is intended to be used for SNPs/Indels VCFs and SVs VCFs from different sequencing technologies, such as PacBio, Oxford Nanopore, and others. The inputs can be configured by the user, allowing for flexibility in the types of long-read data queried and processed.
 
 ## Workflow Overview
+
+### Annotation
 
 1. Query Metamist for long-read sequencing groups and their VCF analyses
 2. Perform necessary reformatting, reheadering, and normalization of the VCFs
@@ -16,12 +18,21 @@ It is intended to be used for SNPs/Indels VCFs and SVs VCFs from different seque
 4. Write the annotated VCF to a Matrix table
 5. Export the Matrix table to an elasticsearch index
 
+### Conversion
+
+1. Query Metamist for long-read sequencing groups and their BAM assays
+2. Convert BAM files to CRAM files using `samtools`
+
+## Directory Structure
+
 ```commandline
 src
 ├── lrs_annotation
 │   ├── __init__.py
 │   ├── run_workflow.py
 │   ├── lrs_annotation.toml
+│   ├── bam_to_cram_stages.py
+│   ├── bam_to_cram_stages.toml
 │   ├── snps_indels_annotation_stages.py
 │   ├── snps_indels_annotation.toml
 │   ├── svs_annotation_stages.py
