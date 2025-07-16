@@ -38,7 +38,7 @@ def bam_to_cram(
 
     # Set resource requirements
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=config_retrieve(['resource_overrides', 'bam_to_cram', 'cpu_cores'], 1),
         storage_gb=config_retrieve(['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'], 50),
     )

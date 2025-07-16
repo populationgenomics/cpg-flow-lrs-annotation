@@ -5,5 +5,5 @@ name = 'bam_to_cram'
 analysis_type = 'cram'
 
 [workflow.resource_overrides.bam_to_cram]
-cpu_cores = 1
-storage_gib = 50
+# cpu_cores = 1
+# storage_gib = 50
