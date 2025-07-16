@@ -28,7 +28,6 @@ def bam_to_cram(
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 
-    requested_nthreads = config_retrieve(['resource_overrides', 'bam_to_cram', 'nthreads'], 1)
     reference_fasta_path = to_path(config_retrieve(['workflow', 'ref_fasta'], reference_path('broad/ref_fasta')))
 
     # Get fasta file
@@ -38,11 +37,10 @@ def bam_to_cram(
     )
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j,
-        ncpu=nthreads,
-        storage_gb=config_retrieve(['resource_overrides', 'bam_to_cram', 'storage_gb'], 50),
+        ncpu=config_retrieve(['resource_overrides', 'bam_to_cram', 'cpu_cores'], 1),
+        storage_gb=config_retrieve(['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'], 50),
     )
 
     j.declare_resource_group(

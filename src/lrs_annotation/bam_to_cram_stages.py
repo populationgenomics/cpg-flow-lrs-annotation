@@ -28,7 +28,7 @@ def make_long_read_cram_path(sg: targets.SequencingGroup) -> CramPath:
     analysis_type=config_retrieve(['workflow', 'bam_to_cram', 'analysis_type'], 'cram'),
     analysis_keys=['cram'],
 )
-class ConvertPacBioBamToCram(stage.SequencingGroupStage):
+class ConvertBamToCram(stage.SequencingGroupStage):
     """
     Convert a PacBio BAM to a CRAM file.
     """
@@ -44,15 +44,12 @@ class ConvertPacBioBamToCram(stage.SequencingGroupStage):
         """
         Using the existing `bam_to_cram` function from the `jobs` module.
         """
-        b = get_batch()
-
-        input_bam = b.read_input_group(bam=str(sg.alignment_input))
+        input_bam = get_batch().read_input_group(bam=str(sg.alignment_input))
         job = bam_to_cram(
             b=get_batch(),
             input_bam=input_bam,
-            extra_label='long_read',
             job_attrs=self.get_job_attrs(sg),
         )
-        b.write_output(job.sorted_cram, str(self.expected_outputs(sg)['cram']).removesuffix('.cram'))
+        get_batch().write_output(job.sorted_cram, str(self.expected_outputs(sg)['cram']).removesuffix('.cram'))
 
         return self.make_outputs(sg, data=self.expected_outputs(sg), jobs=[job])

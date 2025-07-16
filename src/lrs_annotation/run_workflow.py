@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 
 """
-This is the main entry point for the workflow.
-This is a re-implementation of the canonical main.py file in production-pipelines.
-The purpose of this script is to import all the Stages in the workflow (or at least the terminal workflow nodes)
-and begin the CPG-Flow Stage discovery and graph construction process
-
-This is re-implemented as a simpler form, only knowing how to build a single workflow, instead of choosing at runtime
+Choose a workflow to run for LRS annotation.
 """
 
 from argparse import ArgumentParser
 
 from cpg_flow.workflow import run_workflow
 
+from lrs_annotation.bam_to_cram_stages import ConvertBamToCram
 from lrs_annotation.snps_indels_annotation_stages import ExportSnpsIndelsMtToESIndex
 from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex
 
@@ -23,17 +19,17 @@ def cli_main():
     """
     parser = ArgumentParser()
     parser.add_argument('--dry_run', action='store_true', help='Dry run')
-    parser.add_argument('--workflow', type=str, choices=['snps_indels', 'svs'], default='snps_indels')
+    parser.add_argument('--workflow', type=str, choices=['bam_to_cram', 'snps_indels', 'svs'], default='snps_indels')
     args = parser.parse_args()
 
-    # Note - in production-pipelines the main.py script sets up layers of default configuration,
-    # overlaid with workflow-specific configuration, and then runs the workflow.
-    # If you want to re-use that model, this should be carried out before entering the workflow
-
-    # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
-    # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
-
-    stages = [ExportSVsMtToElasticIndex] if args.workflow == 'svs' else [ExportSnpsIndelsMtToESIndex]
+    if args.workflow == 'bam_to_cram':
+        stages = [ConvertBamToCram]
+    elif args.workflow == 'snps_indels':
+        stages = [ExportSnpsIndelsMtToESIndex]
+    elif args.workflow == 'svs':
+        stages = [ExportSVsMtToElasticIndex]
+    else:
+        raise ValueError(f'Unknown workflow: {args.workflow}')
 
     run_workflow(stages=stages, dry_run=args.dry_run)
 
