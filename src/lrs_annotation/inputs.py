@@ -152,7 +152,7 @@ def query_for_lrs_vcfs(
         'variant_type': {'in_': variant_types} if variant_types else None,
         'caller': {'in_': variant_callers} if variant_callers else None,
         'pipeface_version': {'in_': pipeface_versions} if pipeface_versions else None,
-        'joint_called': {'eq': False},
+        'joint_called': {'eq': 'false'},
     }
     single_sample_vcfs_query_results = query(
         VCF_QUERY,
@@ -188,7 +188,7 @@ def query_for_lrs_vcfs(
             f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
         )
     joint_called_vcfs: dict[str, dict] = {}
-    meta_filter['joint_called'] = {'eq': True}
+    meta_filter['joint_called'] = {'eq': 'true'}
     joint_called_vcfs_query_results = query(
         VCF_QUERY,
         variables={
