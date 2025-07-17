@@ -202,7 +202,8 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
             exclude_intervals_path = to_path(config_retrieve(['workflow', 'exclude_intervals_path']))
 
         if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
-            merged_vcf_path = inputs.as_path(multicohort, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
+            sg = multicohort.get_sequencing_groups()[0]
+            merged_vcf_path = inputs.as_path(sg, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
         else:
             merged_vcf_path = inputs.as_path(multicohort, MergeVcfsWithBcftools, 'vcf')
 
@@ -283,7 +284,8 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         outputs = self.expected_outputs(multicohort)
 
         if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
-            vcf_path = inputs.as_path(multicohort, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
+            sg = multicohort.get_sequencing_groups()[0]
+            vcf_path = inputs.as_path(sg, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
         else:
             vcf_path = inputs.as_path(target=multicohort, stage=MergeVcfsWithBcftools, key='vcf')
 

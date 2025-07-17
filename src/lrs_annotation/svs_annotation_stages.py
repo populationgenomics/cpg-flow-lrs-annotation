@@ -256,11 +256,17 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
 
         billing_labels = {'stage': self.name.lower(), AR_GUID_NAME: try_get_ar_guid()}
 
+        if len(inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)) == 1:
+            sg = multicohort.get_sequencing_groups()[0]
+            input_vcf = inputs.as_path(sg, ReformatSVsVcfWithBcftools, 'vcf')
+        else:
+            input_vcf = inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf')
+
         jobs = queue_annotate_sv_jobs(
             dataset_name=multicohort.analysis_dataset,
             multicohort_name=multicohort.name,
             multicohort_ped_file_path=inputs.as_path(multicohort, WriteCleanedPedFile, 'ped_file'),
-            input_vcf=inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf'),
+            input_vcf=input_vcf,
             outputs=outputs,
             labels=billing_labels,
         )
