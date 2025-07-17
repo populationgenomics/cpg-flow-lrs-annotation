@@ -89,7 +89,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         """
         sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
 
-        assert set(get_multicohort().get_sequencing_group_ids()) == set(sgs['sg_ids']), \
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sgs['sg_ids']), \
             ('SGs in the multicohort do not have VCFs matching the filter criteria: '
              f'{set(get_multicohort().get_sequencing_group_ids()) - set(sgs["sg_ids"])}'
              ' Adjust the query filter or the input cohorts')
