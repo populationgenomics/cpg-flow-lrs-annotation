@@ -12,7 +12,8 @@ It is intended to be used for SNPs/Indels VCFs and SVs VCFs from different seque
 
 ### Annotation
 
-1. Query Metamist for long-read sequencing groups and their VCF analyses
+1. Query Metamist for long-read sequencing groups and their VCF analyses based on the filters specified in the configuration
+   2. If the SGs from the input cohorts do not have VCFs matching the filter criteria, the workflow will fail.
 2. Perform necessary reformatting, reheadering, and normalization of the VCFs
 3. Merge the VCFs and annotate the merged VCF with VEP (for SNPs Indels) or STRVCTVRE (for SVs)
 4. Write the annotated VCF to a Matrix table
@@ -77,4 +78,4 @@ src
 
 `inputs.py` contains functions to query Metamist for long-read sequencing groups and their VCF analyses, as well as functions to fetch the necessary VCFs based on the configuration.
 
-`utils.py` contains utility functions used across the workflows, such as parsing command line arguments and reading the configuration.
+`utils.py` contains utility functions used across the workflows, such as parsing command line arguments, submitting cromwell jobs, and reading the configuration.

@@ -120,7 +120,12 @@ def query_for_lrs_vcfs(
         dataset_name (str): the name of the dataset
 
     Returns:
-        a dictionary of the SG IDs and their corresponding VCFs, and a list of the SG IDs in the workflow run.
+        'vcfs': dict[str, dict]
+            A dictionary of sequencing group IDs and their corresponding VCFs and metadata.
+        'sg_ids': list[str]
+            A list of sequencing group IDs that are present in the workflow run.
+        Note: Not every SG will have a VCF, since some may be parents in joint-called families.
+        These SGs will still be included in the 'sg_ids' list, but their VCFs will not be present in the 'vcfs' dict.
     """
     query_filters: dict = config_retrieve(['workflow', 'query_filters'], default={})
     if not query_filters:
@@ -253,12 +258,17 @@ def query_for_lrs_mappings(
     return lrs_mappings
 
 
-def get_sgs_from_datasets(multicohort_datasets: list[str]) -> list[str]:
+def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str] | dict]:
     """
     Returns the sequencing group IDs from multicohort datasets, filtered to the
     sequencing groups that are actually present in the workflow run.
     """
-    sgs: list[str] = []
+    sg_ids: list[str] = []
+    vcfs: dict[str, dict] = {}
     for dataset in multicohort_datasets:
-        sgs.extend(query_for_lrs_vcfs(get_dataset_name(dataset))['sg_ids'])
-    return sgs
+        sg_ids.extend(query_for_lrs_vcfs(get_dataset_name(dataset))['sg_ids'])
+        vcfs.update(query_for_lrs_vcfs(get_dataset_name(dataset))['vcfs'])  # type: ignore[arg-type]
+    return {
+        'sg_ids': sg_ids,
+        'vcfs': vcfs
+    }
