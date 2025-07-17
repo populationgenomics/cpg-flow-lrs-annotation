@@ -119,7 +119,7 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         """
         sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
 
-        assert set(get_multicohort().get_sequencing_group_ids()) == set(sgs['sg_ids']), \
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sgs['sg_ids']), \
             ('SGs in the multicohort do not have VCFs matching the filter criteria: '
              f'{set(get_multicohort().get_sequencing_group_ids()) - set(sgs["sg_ids"])}'
              ' Adjust the query filter or the input cohorts')
@@ -256,11 +256,17 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
 
         billing_labels = {'stage': self.name.lower(), AR_GUID_NAME: try_get_ar_guid()}
 
+        if len(inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)) == 1:
+            sg = multicohort.get_sequencing_groups()[0]
+            input_vcf = inputs.as_path(sg, ReformatSVsVcfWithBcftools, 'vcf')
+        else:
+            input_vcf = inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf')
+
         jobs = queue_annotate_sv_jobs(
             dataset_name=multicohort.analysis_dataset,
             multicohort_name=multicohort.name,
             multicohort_ped_file_path=inputs.as_path(multicohort, WriteCleanedPedFile, 'ped_file'),
-            input_vcf=inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf'),
+            input_vcf=input_vcf,
             outputs=outputs,
             labels=billing_labels,
         )
