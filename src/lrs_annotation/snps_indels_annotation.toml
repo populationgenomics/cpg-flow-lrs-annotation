@@ -1,0 +1,25 @@
+[workflow]
+name = 'snps_indels_annotation'
+
+[workflow.query_filters]
+# sequencing_types = [ 'genome', 'adaptive_sampling', ]
+# analysis_types = [ 'vcf', 'pacbio_vcf',]
+# variant_types = [ 'SNV', 'snp_indel', ]
+# variant_callers = [ 'deeptrio', 'deepvariant', ]
+# pipeface_versions = [ 'v0.8.0', ]
+# prefer_joint_called = false
+# parental_id_suffixes = [ '01', '02', ]
+
+[workflow.resource_overrides.reformat_snps_indels_vcf]
+cpu_cores = 1
+memory_gib = '4Gi'
+storage_gib = '5Gi'
+
+[workflow.resource_overrides.merge_snps_indels_vcfs]
+cpu_cores = 4
+memory_gib = '16Gi'
+storage_gib = '50Gi'
+
+[workflow.resource_overrides.export_mt_to_elastic]
+cpu_cores = 4
+memory = 'lowmem'

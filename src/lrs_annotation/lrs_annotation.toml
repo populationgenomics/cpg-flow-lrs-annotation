@@ -1,0 +1,34 @@
+# Common configuration for LRS annotation workflows
+[workflow]
+name = 'lrs_annotation'
+
+check_inputs = true
+check_intermediates = true
+check_expected_outputs = true
+status_reporter = 'metamist'
+verbose = false
+
+# mandatory fields for cpg-flow
+input_cohorts = []
+sequencing_type = 'genome'
+
+ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
+
+# Options for filtering Metamist queries for sequencing groups and their analysis
+[workflow.query_filters]
+# sequencing_types = [ 'genome', 'adaptive_sampling', ]
+# analysis_types = [ 'vcf', 'pacbio_vcf',]
+# variant_types = [ 'SNV', 'snp_indel', ]
+# variant_callers = [ 'deeptrio', 'deepvariant', ]
+# pipeface_versions = [ 'v0.8.0', ]
+# prefer_joint_called = false
+# parental_id_suffixes = [ '01', '02', ]
+
+[elasticsearch]
+# Configure access to ElasticSearch server
+port = '9243'
+host = 'elasticsearch.es.australia-southeast1.gcp.elastic-cloud.com'
+username = 'seqr'
+# Load ElasticSearch password from a secret, unless SEQR_ES_PASSWORD is set
+password_secret_id = 'seqr-es-password'
+password_project_id = 'seqr-308602'
