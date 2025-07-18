@@ -189,6 +189,7 @@ def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpo
         reference_genome=genome_build(),
         skip_invalid_loci=True,
         force_bgz=True,
+        array_elements_required=False,
     )
 
     # add attributes required for Seqr
