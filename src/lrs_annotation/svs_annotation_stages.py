@@ -364,7 +364,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
 
         jobs = annotate_dataset_jobs_sv(
             mt_path=mt_path,
-            sg_ids=get_sgs_from_datasets([dataset.name]),
+            sg_ids=dataset.get_sequencing_group_ids(),
             out_mt_path=outputs['mt'],
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
