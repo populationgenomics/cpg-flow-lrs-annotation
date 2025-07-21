@@ -134,6 +134,7 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
                 # Fix the GQ type, as Jasmine merged SV VCFs have GQ as a string when it should be an integer
                 if '##FORMAT=<ID=GQ,Number=1,Type=String' in line:
                     f_out.write('##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="The genotype quality">\n')
+                    continue
                 if 'CHROM' in line:
                     # Find the sample IDs in the header line to match to the input sex values
                     l_split = line.rstrip().split('\t')
