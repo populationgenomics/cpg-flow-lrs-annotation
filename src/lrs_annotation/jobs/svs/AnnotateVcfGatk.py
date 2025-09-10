@@ -25,7 +25,6 @@ def queue_annotate_sv_jobs(
         'external_af_population': config_retrieve(['references', 'gatk_sv', 'external_af_population']),
         'external_af_ref_prefix': config_retrieve(['references', 'gatk_sv', 'external_af_ref_bed_prefix']),
         'external_af_ref_bed': config_retrieve(['references', 'gnomad_sv']),
-        'use_hail': False,
     }
 
     input_dict |= get_references(
