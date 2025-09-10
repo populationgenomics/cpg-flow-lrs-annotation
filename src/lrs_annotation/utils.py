@@ -18,7 +18,7 @@ from hailtop.batch.job import Job
 from cpg_utils.cromwell import CromwellOutputType, run_cromwell_workflow_from_repo_and_get_outputs
 from cpg_utils.hail_batch import command, get_batch
 
-GATK_SV_COMMIT = 'dc145a52f76a6f425ac3f481171040e78c0cfeea'
+GATK_SV_COMMIT = config_retrieve(['workflow', 'gatk_sv_commit'])
 
 
 class CromwellJobSizes(Enum):
