@@ -117,14 +117,19 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         - Add a CN field to the FORMAT field, filled with copy number values based on the genotype and sex
         - Adds a unique ID to each record for compatitbility with GATK SV sorting
         """
-        sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        multicohort_datasets = [ds.name for ds in get_multicohort().get_datasets()]
+        sg_ids = []
+        sg_vcfs = {}
+        for ds in multicohort_datasets:
+            sgs = query_for_lrs_vcfs(dataset_name=ds)
+            sg_ids.extend(sgs['sg_ids'])
+            sg_vcfs.update(sgs['vcfs'])
 
-        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sgs['sg_ids']), \
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), \
             ('SGs in the multicohort do not have VCFs matching the filter criteria: '
-             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sgs["sg_ids"])}'
+             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
              ' Adjust the query filter or the input cohorts')
 
-        sg_vcfs = sgs['vcfs']
         if sg.id not in sg_vcfs:
             return None
 
