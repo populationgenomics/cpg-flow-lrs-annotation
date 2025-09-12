@@ -26,7 +26,6 @@ from inputs import (
 )
 
 from utils import (
-    get_dataset_name,
     get_dataset_names,
     get_query_filter_from_config,
     write_mapping_to_file,
@@ -87,16 +86,18 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
-        sgs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        multicohort_datasets = [ds.name for ds in get_multicohort().get_datasets()]
+        sg_ids = []
+        sg_vcfs = {}
+        for ds in multicohort_datasets:
+            sgs = query_for_lrs_vcfs(dataset_name=ds)
+            sg_ids.extend(sgs['sg_ids'])
+            sg_vcfs.update(sgs['vcfs'])
 
-        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sgs['sg_ids']), \
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), \
             ('SGs in the multicohort do not have VCFs matching the filter criteria: '
-             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sgs["sg_ids"])}'
+             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
              ' Adjust the query filter or the input cohorts')
-
-        sg_vcfs = sgs['vcfs']
-        if sg.id not in sg_vcfs:
-            return None
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 
