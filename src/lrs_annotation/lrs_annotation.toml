@@ -1,6 +1,7 @@
 # Common configuration for LRS annotation workflows
 [workflow]
 name = 'lrs_annotation'
+gatk_sv_commit = '890582922bccb4b651275506a34311c949417f6c'
 
 check_inputs = true
 check_intermediates = true

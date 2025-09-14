@@ -5,9 +5,9 @@ from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
-from lrs_annotation.scripts.svs import sniffles_vcf_modifier
+from lrs_annotation.scripts.svs import sv_vcf_modifier
 
-def sniffles_modify_vcf(
+def modify_sv_vcf(
     vcf_path: Path,
     ref_fa_path: Path,
     sex_mapping_file_path: Path,
@@ -15,7 +15,7 @@ def sniffles_modify_vcf(
     job_attrs: dict | None = None,
 ) -> Job:
     """
-    Call the sniffles VCF modifier script to modify the SVs VCF file before reformatting.
+    Call the SV VCF modifier script to modify the VCF file before reformatting.
     """
     j = get_batch().new_job(job_name, job_attrs)
 
@@ -30,7 +30,7 @@ def sniffles_modify_vcf(
     j.storage('10Gi')
     j.command(
         f"""
-        python3 {sniffles_vcf_modifier.__file__} \\
+        python3 {sv_vcf_modifier.__file__} \\
             --vcf_path {vcf} \\
             --vcf_out {j.vcf_out["vcf.gz"]} \\
             --fa {fasta} \\
