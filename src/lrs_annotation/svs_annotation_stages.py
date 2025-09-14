@@ -12,7 +12,7 @@ from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 
-from lrs_annotation.jobs.svs.ModifySvVcf import modify_sv_vcf
+from jobs.svs.ModifySvVcf import modify_sv_vcf
 from jobs.svs.AnnotateCohortMatrixtable import annotate_cohort_jobs_svs
 from jobs.svs.AnnotateDatasetMatrixtable import annotate_dataset_jobs_sv
 from jobs.svs.AnnotateVcfGatk import queue_annotate_sv_jobs
