@@ -12,7 +12,7 @@ from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 
-from jobs.svs.SnifflesModifyVcf import sniffles_modify_vcf
+from lrs_annotation.jobs.svs.ModifySvVcf import modify_sv_vcf
 from jobs.svs.AnnotateCohortMatrixtable import annotate_cohort_jobs_svs
 from jobs.svs.AnnotateDatasetMatrixtable import annotate_dataset_jobs_sv
 from jobs.svs.AnnotateVcfGatk import queue_annotate_sv_jobs
@@ -56,7 +56,7 @@ class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
         """
         Write the LRS ID to SG ID mapping to a file, and the LRS ID to sex mapping to another file.
         The first is used by bcftools reheader to update the sample IDs in the VCFs, the second is used by the
-        Sniffles VCF modifier script when calculating copy number.
+        SV VCF modifier script when calculating copy number.
         """
         outputs = self.expected_outputs(multicohort)
         sgid_mapping_file_path = outputs['lrs_sg_id_mapping']
@@ -98,24 +98,24 @@ class WriteCleanedPedFile(stage.MultiCohortStage):
 
 
 @stage.stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles])
-class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
+class ModifySVsVcf(stage.SequencingGroupStage):
     """
-    Modify the long-read SV VCFs using Sniffles, saving them to temp storage for use in the next stage.
+    Modify the long-read SV VCFs, saving them to temp storage for use in the next stage.
     - This is explicitly skipped for the parents in trio joint-called VCFs
     """
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' / 'sniffles_vcfs'
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' / 'modified_vcfs'
         return {
-            'vcf': sgid_prefix / f'{sequencing_group.id}_sniffles_modified.vcf.gz',
+            'vcf': sgid_prefix / f'{sequencing_group.id}_modified.vcf.gz',
         }
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
-        Uses a python job to change the VCF contents with Sniffles
+        Uses a python job to change the VCF contents, making the following changes:
         - Replace REF strings with the reference base
         - Replace ALT strings with symbolic "<TYPE>" derived from the SVTYPE INFO field
         - Add a CN field to the FORMAT field, filled with copy number values based on the genotype and sex
-        - Adds a unique ID to each record for compatitbility with GATK SV sorting
+        - Adds a unique ID to each record for compatibility with GATK SV sorting
         """
         multicohort_datasets = [ds.name for ds in get_multicohort().get_datasets()]
         sg_ids = []
@@ -137,14 +137,14 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         lrs_id_sex_map = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_id_sex_mapping')
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
-        job_name = f'Sniffles modify {"joint-called " if joint_called else ""}{vcf_path} prior to reformatting'
+        job_name = f'Modify {"joint-called " if joint_called else ""}{vcf_path} prior to reformatting'
 
-        mod_job = sniffles_modify_vcf(
+        mod_job = modify_sv_vcf(
             vcf_path=to_path(vcf_path),
             ref_fa_path=config_retrieve(['workflow', 'ref_fasta']),
             sex_mapping_file_path=lrs_id_sex_map,
             job_name=job_name,
-            job_attrs={'tool': 'sniffles'}
+            job_attrs={'tool': 'python'}
         )
 
         # write from temp storage into GCP
@@ -154,10 +154,10 @@ class ModifySVsVcfWithSniffles(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
 
 
-@stage.stage(required_stages=[ModifySVsVcfWithSniffles, WriteLrsIdToSgAndSexMappingFiles])
+@stage.stage(required_stages=[ModifySVsVcf, WriteLrsIdToSgAndSexMappingFiles])
 class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
     """
-    Reformat the Sniffles-modified long-read SV VCFs using BCFtools
+    Reformat the modified long-read SV VCFs using BCFtools
     """
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' /  'reformatted_vcfs'
@@ -177,7 +177,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
             return None
 
         # Input VCF and reheadering file
-        vcf_path = inputs.as_path(sg, ModifySVsVcfWithSniffles, 'vcf')
+        vcf_path = inputs.as_path(sg, ModifySVsVcf, 'vcf')
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_sg_id_mapping')
 
         reformatting_job = reformat_svs_vcf_with_bcftools(
@@ -240,7 +240,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
 
 @stage.stage(required_stages=[
     WriteCleanedPedFile,
-    ModifySVsVcfWithSniffles,
+    ModifySVsVcf,
     ReformatSVsVcfWithBcftools,
     MergeSVsVcfsWithBcftools])
 class AnnotateSVsWithGatk(stage.MultiCohortStage):
