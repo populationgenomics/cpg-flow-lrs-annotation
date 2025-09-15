@@ -9,6 +9,9 @@ CHRX = 'chrX'
 CHRY = 'chrY'
 CHRM = 'chrM'
 
+# From https://www.bioinformatics.org/sms/iupac.html
+NON_ACGT_IUPAC_BASES = 'RYSWKMBDHVryswkmbdhv'
+
 SV_ANNOTATION_TYPES = [
     # From GATKSVVCFConstants.StructuralVariantAnnotationType enum
     'BND',
@@ -154,10 +157,9 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str): 
                 print(f'Error getting sequence for {chrom}:{position} - {e}')
                 continue
 
-            # At some loci, the reference base may be the IUPAC ambiguity code 'R'
-            # If we encounter this, we need to skip over it
-            if new_base == 'R':
-                continue
+            # At some loci, the reference base may contain non-AGCT IUPAC base codes
+            # If we encounter these, we need to replace them with 'N' (code for 'any base')
+            new_base = new_base.translate(str.maketrans(dict.fromkeys(NON_ACGT_IUPAC_BASES, 'N')))
 
             ref = l_split[3]
             if ref not in ('N', '.'):
