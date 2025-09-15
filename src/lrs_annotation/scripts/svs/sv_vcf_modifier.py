@@ -138,8 +138,8 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str): 
                     # Find the sample IDs in the header line to match to the input sex values
                     l_split = line.rstrip().split('\t')
                     sample_ids = l_split[9:]
-                    f_out.write(line)
-                    continue
+                f_out.write(line)
+                continue
 
             # for non-header lines, split on tabs to extract fields:
             # CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, SAMPLE
