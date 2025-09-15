@@ -9,6 +9,9 @@ CHRX = 'chrX'
 CHRY = 'chrY'
 CHRM = 'chrM'
 
+# From https://www.bioinformatics.org/sms/iupac.html
+NON_ACGT_IUPAC_BASES = 'RYSWKMBDHVryswkmbdhv'
+
 SV_ANNOTATION_TYPES = [
     # From GATKSVVCFConstants.StructuralVariantAnnotationType enum
     'BND',
@@ -79,7 +82,7 @@ def translate_var_and_sex_to_cn(contig: str, var_type: str, genotype: str, sex: 
 
 
 def cli_main():
-    parser = ArgumentParser(description='CLI for the Sniffles VCF modification script')
+    parser = ArgumentParser(description='CLI for the SV VCF modification script')
     parser.add_argument('--vcf_path', help='Path to a localised VCF, this will be modified', required=True)
     parser.add_argument('--vcf_out', help='Path to an output location for the modified VCF', required=True)
     parser.add_argument('--fa', help='Path to a FASTA sequence file for GRCh38', required=True)
@@ -89,7 +92,7 @@ def cli_main():
         required=True,
     )
     args = parser.parse_args()
-    modify_sniffles_vcf(
+    modify_sv_vcf(
         file_in=args.vcf_path,
         file_out=args.vcf_out,
         fa=args.fa,
@@ -97,7 +100,7 @@ def cli_main():
     )
 
 
-def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):
+def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):  # noqa: PLR0915
     """
     Scrolls through the SV VCF and performs a few updates:
     - replaces the ALT allele with a symbolic "<TYPE>", derived from the SVTYPE INFO field
@@ -107,7 +110,7 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
     rebuilds the VCF following those edits, and writes the compressed data back out
 
     Args:
-        file_in (str): localised, VCF directly from Sniffles
+        file_in (str): localised SV VCF
         file_out (str): local batch output path, same VCF with INFO/ALT alterations
         fa (str): path to a reference FastA file, requires an implicit fa.fai index
         sex_mapping_file (str): path to a file which maps LRS ID to sex value
@@ -119,7 +122,7 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
     # Get the dict of LRS ID to sex value
     sex_mapping = read_sex_mapping_file(sex_mapping_file)
 
-    # read and write compressed. This is only a single sample VCF, but... it's good practice
+    # read and write compressed
     with gzip.open(file_in, 'rt') as f, gzip.open(file_out, 'wt') as f_out:
 
         for index, line in enumerate(f):
@@ -127,7 +130,6 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
             if index % 10000 == 0:
                 print(f'Lines processed: {index}')
 
-            # alter the sample line in the header
             if line.startswith('#'):
                 if 'FORMAT=<ID=GT' in line:
                     f_out.write('##FORMAT=<ID=RD_CN,Number=1,Type=Integer,Description="Copy number of this variant">\n')
@@ -139,11 +141,11 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
                     # Find the sample IDs in the header line to match to the input sex values
                     l_split = line.rstrip().split('\t')
                     sample_ids = l_split[9:]
-
                 f_out.write(line)
                 continue
 
-            # for non-header lines, split on tabs
+            # for non-header lines, split on tabs to extract fields:
+            # CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, SAMPLE
             l_split = line.rstrip().split('\t')
 
             # set the reference allele to be the correct reference base
@@ -155,13 +157,17 @@ def modify_sniffles_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: 
                 print(f'Error getting sequence for {chrom}:{position} - {e}')
                 continue
 
-            # a quick check, if we can
-            if l_split[3] not in ('N', '.'):
+            # At some loci, the reference base may contain non-AGCT IUPAC base codes
+            # If we encounter these, we need to replace them with 'N' (code for 'any base')
+            new_base = new_base.translate(str.maketrans(dict.fromkeys(NON_ACGT_IUPAC_BASES, 'N')))
+
+            ref = l_split[3]
+            if ref not in ('N', '.'):
                 # If using the hg38 masked reference, the base will always be upper case
-                # So make sure the comparison to the Sniffles REF is upper case too
+                # So make sure the comparison to the SV VCF REF is upper case too
                 assert (
-                    new_base == l_split[3][0].upper()
-                ), f'Discrepancy between faidx and Sniffles: {new_base}, {l_split[3]}'
+                    new_base == ref[0].upper()
+                ), f'Discrepancy between faidx and SV VCF at {chrom}:{position}: {new_base}, {ref}'
 
             # replace the REF String
             l_split[3] = new_base

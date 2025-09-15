@@ -1,8 +1,6 @@
 [workflow]
 name = 'svs_annotation'
 
-gatk_sv_commit = '890582922bccb4b651275506a34311c949417f6c'
-
 # update this when cpg_workflows.scripts.get_gencode_gtf.sh is re-run
 gencode_gtf_file = 'gs://cpg-common-main/references/hg38/v0/gencode_47.gtf.gz'
 
