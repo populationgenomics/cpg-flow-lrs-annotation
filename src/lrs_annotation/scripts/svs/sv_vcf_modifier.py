@@ -154,7 +154,7 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str): 
                 print(f'Error getting sequence for {chrom}:{position} - {e}')
                 continue
 
-            # At some loci, the reference base may the IUPAC ambiguity code 'R'
+            # At some loci, the reference base may be the IUPAC ambiguity code 'R'
             # If we encounter this, we need to skip over it
             if new_base == 'R':
                 continue
