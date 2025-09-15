@@ -78,19 +78,6 @@ def translate_var_and_sex_to_cn(contig: str, var_type: str, genotype: str, sex: 
     return copy_number
 
 
-def process_header_line(line: str) -> str:
-    """
-    Proces a header line from the VCF, identified by it starting with '#'
-    """
-    if 'FORMAT=<ID=GT' in line:
-        return '##FORMAT=<ID=RD_CN,Number=1,Type=Integer,Description="Copy number of this variant">\n'
-    # Fix the GQ type, as Jasmine merged SV VCFs have GQ as a string when it should be an integer
-    if '##FORMAT=<ID=GQ,Number=1,Type=String' in line:
-        return '##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="The genotype quality">\n'
-
-    return line
-
-
 def cli_main():
     parser = ArgumentParser(description='CLI for the SV VCF modification script')
     parser.add_argument('--vcf_path', help='Path to a localised VCF, this will be modified', required=True)
@@ -110,7 +97,7 @@ def cli_main():
     )
 
 
-def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):
+def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):  # noqa: PLR0915
     """
     Scrolls through the SV VCF and performs a few updates:
     - replaces the ALT allele with a symbolic "<TYPE>", derived from the SVTYPE INFO field
@@ -140,15 +127,19 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):
             if index % 10000 == 0:
                 print(f'Lines processed: {index}')
 
-            # alter the sample line in the header
-            if line.startswith('#') and 'CHROM' not in line:
-                f_out.write(process_header_line(line))
-                continue
-            if line.startswith('#') and 'CHROM' in line:
-                # Find the sample IDs in the header line to match to the input sex values
-                sample_ids = line.rstrip().split('\t')[9:]
-                f_out.write(line)
-                continue
+            if line.startswith('#'):
+                if 'FORMAT=<ID=GT' in line:
+                    f_out.write('##FORMAT=<ID=RD_CN,Number=1,Type=Integer,Description="Copy number of this variant">\n')
+                # Fix the GQ type, as Jasmine merged SV VCFs have GQ as a string when it should be an integer
+                if '##FORMAT=<ID=GQ,Number=1,Type=String' in line:
+                    f_out.write('##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="The genotype quality">\n')
+                    continue
+                if 'CHROM' in line:
+                    # Find the sample IDs in the header line to match to the input sex values
+                    l_split = line.rstrip().split('\t')
+                    sample_ids = l_split[9:]
+                    f_out.write(line)
+                    continue
 
             # for non-header lines, split on tabs to extract fields:
             # CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, SAMPLE
@@ -174,7 +165,7 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str):
                 # So make sure the comparison to the SV VCF REF is upper case too
                 assert (
                     new_base == ref[0].upper()
-                ), f'Discrepancy between faidx and SV VCF: {new_base}, {ref}'
+                ), f'Discrepancy between faidx and SV VCF at {chrom}:{position}: {new_base}, {ref}'
 
             # replace the REF String
             l_split[3] = new_base
