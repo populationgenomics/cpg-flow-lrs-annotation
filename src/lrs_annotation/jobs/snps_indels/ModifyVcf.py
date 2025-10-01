@@ -17,7 +17,7 @@ def bcftools_reformat(
 
     Reheader the VCF to replace the LRS IDs with the SG IDs with bcftools reheader.
     Normalise the VCF with the reference genome and bcftools norm.
-    Uppercases the REF allele with awk.
+    Uppercases the allele strings with awk.
     Finally, sort and index the VCF with bcftools sort.
     """
     # Input files
@@ -41,8 +41,8 @@ def bcftools_reformat(
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
         f'bcftools sort -Oz -W=tbi - -o sorted.vcf.gz && '
         f'bcftools view sorted.vcf.gz | '
-            # Uppercase the REF allele with awk
-            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); ; $5=toupper($5); print}' | "
+            # Uppercase the allele strings with awk
+            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); $5=toupper($5); print}' | "
             f'bgzip > {job.vcf_out["vcf.gz"]} && '
         f'tabix -p vcf {job.vcf_out["vcf.gz"]}'
     )
