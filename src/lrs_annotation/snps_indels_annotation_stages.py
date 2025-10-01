@@ -16,7 +16,7 @@ from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps
 from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
 from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
 from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
-from jobs.snps_indels.ReformatVcfs import reformat_snps_indels_vcf_with_bcftools
+from jobs.snps_indels.ModifyVcf import bcftools_reformat
 from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
 from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from inputs import (
@@ -67,11 +67,10 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
 
 
 @stage.stage(required_stages=[WriteLrsIdToSgIdMappingFile])
-class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
+class ModifyVcf(stage.SequencingGroupStage):
     """
-    Take each of the long-read SNPs Indels VCFs, and re-format the contents
+    Modify the long-read SNPs Indels VCFs as a pre-processing step before merging.
     """
-
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'snps_indels' / 'reformatted_vcfs'
         return {
@@ -81,7 +80,6 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
-        A python job to change the VCF contents
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
@@ -105,11 +103,10 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         vcf_path: str = sg_vcfs[sg.id]['vcf']
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sg_id_mapping')
 
-        reformatting_job = reformat_snps_indels_vcf_with_bcftools(
-            batch=get_batch(),
+        reformatting_job = bcftools_reformat(
+            vcf_path=vcf_path,
             job_name=f'Reformat SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{vcf_path}',
             job_attrs={'tool': 'bcftools'},
-            vcf_path=vcf_path,
             lrs_sg_id_mapping_path=lrs_sg_id_mapping,
         )
 
@@ -119,7 +116,7 @@ class ReformatSnpsIndelsVcfWithBcftools(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
-@stage.stage(required_stages=ReformatSnpsIndelsVcfWithBcftools)
+@stage.stage(required_stages=ModifyVcf)
 class MergeVcfsWithBcftools(stage.MultiCohortStage):
     """
     Merge the reformatted SNPs Indels VCFs together with bcftools
@@ -138,7 +135,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
 
         # Get the reformatted VCFs from the previous stage
-        reformatted_vcfs = inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)
+        reformatted_vcfs = inputs.as_dict_by_target(ModifyVcf)
         reformatted_vcfs = {
             sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']
         }
@@ -165,7 +162,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[ReformatSnpsIndelsVcfWithBcftools, MergeVcfsWithBcftools])
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
 class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
     """
     Get the site-only VCFs from the merged VCF by splitting the VCF with GATK SelectVariants,
@@ -202,9 +199,9 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
         if config_retrieve(['workflow', 'exclude_intervals_path'], default=None):
             exclude_intervals_path = to_path(config_retrieve(['workflow', 'exclude_intervals_path']))
 
-        if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
+        if len(inputs.as_dict_by_target(ModifyVcf)) == 1:
             sg = multicohort.get_sequencing_groups()[0]
-            merged_vcf_path = inputs.as_path(sg, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
+            merged_vcf_path = inputs.as_path(sg, ModifyVcf, 'vcf')
         else:
             merged_vcf_path = inputs.as_path(multicohort, MergeVcfsWithBcftools, 'vcf')
 
@@ -263,7 +260,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
 
 
 @stage.stage(required_stages=[
-    ReformatSnpsIndelsVcfWithBcftools,
+    ModifyVcf,
     MergeVcfsWithBcftools,
     VepLongReadAnnotation]
 )
@@ -284,9 +281,9 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         """
         outputs = self.expected_outputs(multicohort)
 
-        if len(inputs.as_dict_by_target(ReformatSnpsIndelsVcfWithBcftools)) == 1:
+        if len(inputs.as_dict_by_target(ModifyVcf)) == 1:
             sg = multicohort.get_sequencing_groups()[0]
-            vcf_path = inputs.as_path(sg, ReformatSnpsIndelsVcfWithBcftools, 'vcf')
+            vcf_path = inputs.as_path(sg, ModifyVcf, 'vcf')
         else:
             vcf_path = inputs.as_path(target=multicohort, stage=MergeVcfsWithBcftools, key='vcf')
 
