@@ -1,17 +1,16 @@
 
 from hailtop.batch.job import Job
 
-from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 
 def bcftools_reformat(
-    vcf_path: Path,
+    vcf_path: str,
     job_name: str,
     job_attrs: dict,
-    lrs_sg_id_mapping_path: Path,
+    lrs_sg_id_mapping_path: str,
 ) -> Job:
     """
     Reformat SNPs and Indels VCFs using bcftools.
