@@ -42,7 +42,7 @@ def bcftools_reformat(
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
         f'bcftools sort -Oz -W=tbi - -o sorted.vcf.gz && '
         f'bcftools view sorted.vcf.gz | '
-            f"sed '/^#/!s/\\t\\([agct]*\\)\\t/\\t\\U\\1\\t/3' | "
+            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); print}' | "
             f'bgzip > {job.vcf_out["vcf.gz"]} && '
         f'tabix -p vcf {job.vcf_out["vcf.gz"]}'
     )
