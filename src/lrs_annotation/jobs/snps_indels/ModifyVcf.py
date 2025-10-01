@@ -42,7 +42,7 @@ def bcftools_reformat(
         f'bcftools sort -Oz -W=tbi - -o sorted.vcf.gz && '
         f'bcftools view sorted.vcf.gz | '
             # Uppercase the REF allele with awk
-            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); print}' | "
+            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); ; $5=toupper($5); print}' | "
             f'bgzip > {job.vcf_out["vcf.gz"]} && '
         f'tabix -p vcf {job.vcf_out["vcf.gz"]}'
     )
