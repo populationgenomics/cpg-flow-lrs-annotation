@@ -39,8 +39,7 @@ def bcftools_reformat(
     job.command(
         f'bcftools reheader --samples {local_id_mapping} {local_vcf} | '
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
-        f'bcftools sort -Oz -W=tbi - -o sorted.vcf.gz && '
-        f'bcftools view sorted.vcf.gz | '
+        f'bcftools sort -Oz -W=tbi - | '
             # Uppercase the allele strings with awk
             "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); $5=toupper($5); print}' | "
             f'bgzip > {job.vcf_out["vcf.gz"]} && '
