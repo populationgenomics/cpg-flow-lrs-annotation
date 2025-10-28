@@ -121,11 +121,11 @@ def add_split_vcf_job(
     j = b.new_job('SplitVcf', (job_attrs or {}) | {'tool': 'gatk SelectVariants'})
     j.image(config_retrieve(['images', 'gatk']))
     j = get_resource_overrides_for_job(j, 'split_vcf')
-    resources = config_retrieve(['workflow', 'resource_overrides', 'split_vcf'])
-    if resources['memory'] == 'highmem':
-        res = HIGHMEM.set_resources(j=j, ncpu=resources.get('cpu_cores', 1))
+    resources = config_retrieve(['workflow', 'resource_overrides', 'split_vcf'], {})
+    if resources.get('memory', 'standard') == 'highmem':
+        res = HIGHMEM.set_resources(j=j, ncpu=resources.get('cpu_cores', 2))
     else:
-        res = STANDARD.set_resources(j=j, ncpu=resources.get('cpu_cores', 1))
+        res = STANDARD.set_resources(j=j, ncpu=resources.get('cpu_cores', 2))
 
     for idx, interval in enumerate(intervals):
         output_vcf_path = output_vcf_paths[idx]
