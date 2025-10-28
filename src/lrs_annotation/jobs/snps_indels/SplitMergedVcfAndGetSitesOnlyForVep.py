@@ -3,12 +3,12 @@ import hailtop.batch as hb
 from hailtop.batch.job import Job
 
 from cpg_flow.utils import can_reuse
-from cpg_flow.resources import STANDARD
+from cpg_flow.resources import STANDARD, HIGHMEM
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
 
-from utils import get_intervals_from_bed
+from utils import get_intervals_from_bed, get_resource_overrides_for_job
 
 from .PicardIntervals import get_intervals
 
@@ -120,7 +120,12 @@ def add_split_vcf_job(
     """
     j = b.new_job('SplitVcf', (job_attrs or {}) | {'tool': 'gatk SelectVariants'})
     j.image(config_retrieve(['images', 'gatk']))
-    res = STANDARD.set_resources(j=j, ncpu=2)
+    j = get_resource_overrides_for_job(j, 'split_vcf')
+    resources = config_retrieve(['workflow', 'resource_overrides', 'split_vcf'])
+    if resources['memory'] == 'highmem':
+        res = HIGHMEM.set_resources(j=j, ncpu=resources.get('cpu_cores', 1))
+    else:
+        res = STANDARD.set_resources(j=j, ncpu=resources.get('cpu_cores', 1))
 
     for idx, interval in enumerate(intervals):
         output_vcf_path = output_vcf_paths[idx]
