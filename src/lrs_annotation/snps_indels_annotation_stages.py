@@ -328,8 +328,10 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             dataset (Dataset): SGIDs specific to this dataset/project
             inputs ():
         """
-        eligible_datasets = config_retrieve(['workflow', 'write_mt_for_datasets'], default=[])
-        if dataset.name not in eligible_datasets:
+        # only create matrixtables for datasets specified in the config
+        # or, if this config option is not set, run for all datasets
+        eligible_datasets = config_retrieve(['workflow', 'write_mt_for_datasets'], default=None)
+        if eligible_datasets is not None and dataset.name not in eligible_datasets:
             logger.info(f'Skipping MT writing for {dataset}')
             return self.make_outputs(dataset)
 
@@ -379,8 +381,9 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         Uses the non-DataProc MT-to-ES conversion script
         """
         # only create the elasticsearch index for the datasets specified in the config
-        eligible_datasets = config_retrieve(['workflow', 'create_es_index_for_datasets'], default=[])
-        if dataset.name not in eligible_datasets:
+        # or, if this config option is not set, create it for all datasets
+        eligible_datasets = config_retrieve(['workflow', 'create_es_index_for_datasets'], default=None)
+        if eligible_datasets is not None and dataset.name not in eligible_datasets:
             logger.info(f'Skipping ES index creation for {dataset}')
             return None
         # try to generate a password here - we'll find out inside the script anyway, but
