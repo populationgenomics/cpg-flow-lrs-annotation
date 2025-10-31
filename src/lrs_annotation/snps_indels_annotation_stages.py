@@ -328,6 +328,11 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             dataset (Dataset): SGIDs specific to this dataset/project
             inputs ():
         """
+        eligible_datasets = config_retrieve(['workflow', 'write_mt_for_datasets'], default=[])
+        if dataset.name not in eligible_datasets:
+            logger.info(f'Skipping MT writing for {dataset}')
+            return self.make_outputs(dataset)
+
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
         outputs = self.expected_outputs(dataset)
@@ -373,7 +378,11 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         """
         Uses the non-DataProc MT-to-ES conversion script
         """
-
+        # only create the elasticsearch index for the datasets specified in the config
+        eligible_datasets = config_retrieve(['workflow', 'create_es_index_for_datasets'], default=[])
+        if dataset.name not in eligible_datasets:
+            logger.info(f'Skipping ES index creation for {dataset}')
+            return None
         # try to generate a password here - we'll find out inside the script anyway, but
         # by that point we'd already have localised the MT, wasting time and money
         try:
