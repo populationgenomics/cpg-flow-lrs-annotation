@@ -4,6 +4,8 @@ Utility methods used across the workflows
 import hashlib
 from hailtop.batch.job import BashJob
 from enum import Enum
+from cpg_flow import targets
+from cpg_flow.utils import logger
 from cpg_utils import Path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import ConfigError, config_retrieve, reference_path, image_path
@@ -74,6 +76,30 @@ def get_sg_hash(sequencing_group_ids: list[str]) -> str:
     # use a short hash to avoid exceeding the 38 character limit for Hail Batch job
     h = hashlib.sha256(s.encode()).hexdigest()[:38]
     return f'{h}_{len(sequencing_group_ids)}'
+
+
+@cache
+def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
+    """
+    Get the subset of sequencing groups that are in the specified families for a dataset
+    Returns a dict containing the sequencing groups and a name suffix for the outputs
+    """
+    if not config_retrieve(['workflow', dataset.name, 'only_families'], []):
+        return None
+    only_family_ids = set(config_retrieve(['workflow', dataset.name, 'only_families'], []))
+    # keep only the SG IDs for the families in the only_families list
+    logger.info(f'Finding sequencing groups for families {only_family_ids} in dataset {dataset.name}')
+    family_sg_ids = [sg.id for sg in dataset.get_sequencing_groups() if sg.pedigree.fam_id in only_family_ids]
+    if not family_sg_ids:
+        raise ValueError(f'No sequencing groups found for families {only_family_ids} in dataset {dataset.name}.')
+    logger.info(f'Keeping only {len(family_sg_ids)} SGs from families {len(only_family_ids)} in {dataset}:')
+    logger.info(only_family_ids)
+    logger.info(family_sg_ids)
+
+    h = hashlib.sha256(''.join(sorted(family_sg_ids)).encode()).hexdigest()[:4]
+    name_suffix = f'{len(family_sg_ids)}_sgs-{len(only_family_ids)}_families-{h}'
+
+    return {'family_sg_ids': family_sg_ids, 'name_suffix': name_suffix}
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
