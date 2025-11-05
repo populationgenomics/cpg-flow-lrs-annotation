@@ -20,10 +20,11 @@ def annotate_dataset_jobs(
     Split mt by dataset and annotate dataset-specific fields (only for those datasets
     that will be loaded into Seqr).
     """
-    sample_ids_list_path = tmp_prefix / 'sample-list.txt'
-    if not config_retrieve(['workflow', 'dry_run'], default=False):
-        with sample_ids_list_path.open('w') as f:
-            f.write(','.join(sg_ids))
+    id_file = tmp_prefix / 'sg-list.txt'
+    if not config_retrieve(['workflow', 'dry_run'], False):
+        with id_file.open('w') as f:
+            for sg_id in sorted(sg_ids):
+                f.write(f'{sg_id}\n')
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 

@@ -27,6 +27,7 @@ from inputs import (
 
 from utils import (
     get_dataset_names,
+    get_family_sequencing_groups,
     get_query_filter_from_config,
     write_mapping_to_file,
     joint_calling_scatter_count,
@@ -315,8 +316,13 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         Expected to generate a matrix table
         """
         sg_hash = workflow.get_workflow().output_version
+        mt_name = f'LongReadSNPsIndels-{sg_hash}-{dataset.name}'
+        if family_sgs := get_family_sequencing_groups(dataset):
+            return {
+                'mt': (dataset.prefix() / 'mt' / f'{mt_name}-{family_sgs["name_suffix"]}.mt'),
+            }
         return {
-            'mt': (dataset.prefix() / 'mt' / f'LongReadSNPsIndels-{sg_hash}-{dataset.name}.mt'),
+            'mt': (dataset.prefix() / 'mt' / f'{mt_name}.mt'),
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -335,6 +341,11 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             logger.info(f'Skipping MT writing for {dataset}')
             return self.make_outputs(dataset)
 
+        if family_sgs := get_family_sequencing_groups(dataset):
+            sg_ids = family_sgs['family_sg_ids']
+        else:
+            sg_ids = dataset.get_sequencing_group_ids()
+
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
         outputs = self.expected_outputs(dataset)
@@ -343,7 +354,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
 
         jobs = annotate_dataset_jobs(
             mt_path=mt_path,
-            sg_ids=dataset.get_sequencing_group_ids(),
+            sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
@@ -371,6 +382,8 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         sg_hash = workflow.get_workflow().output_version
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
         index_name = f'{dataset.name}-{sequencing_type}-LRS-SNPsIndels-{sg_hash}'.lower()
+        if family_sgs := get_family_sequencing_groups(dataset):
+            index_name += f'-{family_sgs["name_suffix"]}'
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'snps_indels' / 'es' / f'{index_name}.done',

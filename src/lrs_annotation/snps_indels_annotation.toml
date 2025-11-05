@@ -10,6 +10,10 @@ name = 'snps_indels_annotation'
 # prefer_joint_called = false
 # parental_id_suffixes = [ '01', '02', ]
 
+# Use this option to export mt / es-index for only certain families in a dataset
+# [workflow.dataset_name]
+# only_families = []
+
 [workflow.resource_overrides.reformat_snps_indels_vcf]
 cpu_cores = 1
 memory_gib = '4Gi'
