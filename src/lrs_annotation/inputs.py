@@ -13,9 +13,11 @@ from utils import get_dataset_name
 
 VCF_QUERY = gql(
     """
-    query MyQuery($dataset: String!, $seqTypes: [String!], $analysisTypes: [String!], $metaFilter: JSON) {
+    query MyQuery(
+        $dataset: String!, $seqTypes: [String!], $platforms: [String!], $analysisTypes: [String!], $metaFilter: JSON
+    ) {
       project(name: $dataset) {
-        sequencingGroups(type: {in_: $seqTypes}, technology: {eq: "long-read"}) {
+        sequencingGroups(type: {in_: $seqTypes}, technology: {eq: "long-read"}, platform: {in_: $platforms}) {
           id
           type
           technology
@@ -35,9 +37,9 @@ VCF_QUERY = gql(
 
 LRS_IDS_QUERY = gql(
     """
-    query MyQuery($dataset: String!, $seqTypes: [String!]) {
+    query MyQuery($dataset: String!, $seqTypes: [String!], $platforms: [String!]) {
     project(name: $dataset) {
-      sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}) {
+      sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}, platform: {in_: $platforms}) {
           id
           sample {
             externalId
@@ -107,6 +109,7 @@ def query_for_lrs_vcfs(
 
     Mandatory query filters:
       - sequencing_types   - e.g [ 'genome', 'adaptive_sampling', ]
+      - sequencing_platforms - e.g [ 'pacbio', 'oxford-nanopore', ]
       - analysis_types     - e.g [ 'vcf', 'pacbio_vcf', ]
       - variant_types      - e.g [ 'SNV, 'snp_indel', ]
       - variant_callers    - e.g [ 'deeptrio', 'deepvariant', ]
@@ -137,6 +140,7 @@ def query_for_lrs_vcfs(
             raise ValueError(f'Missing required query filter: {key}')
 
     sequencing_types = tuple(query_filters.get('sequencing_types', []))
+    sequencing_platforms = tuple(query_filters.get('sequencing_platforms', []))
     analysis_types = tuple(query_filters.get('analysis_types', []))
     variant_types = tuple(query_filters.get('variant_types', []))
     variant_callers = tuple(query_filters.get('variant_callers', []))
@@ -145,7 +149,8 @@ def query_for_lrs_vcfs(
     verbose = config_retrieve(['workflow', 'verbose'], default=False)
     if verbose:
         logger.info(
-            f'{dataset_name} :: Finding {variant_types} single-sample VCFs for sequencing types: {sequencing_types},'
+            f'{dataset_name} :: Finding {variant_types} single-sample VCFs for '
+            f' sequencing types: {sequencing_types}, sequence platforms: {sequencing_platforms},'
             f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
         )
     single_sample_vcfs: dict[str, dict] = {}
@@ -161,6 +166,7 @@ def query_for_lrs_vcfs(
         variables={
             'dataset': dataset_name,
             'seqTypes': sequencing_types,
+            'platforms': sequencing_platforms,
             'analysisTypes': analysis_types,
             'metaFilter': meta_filter,
         },
@@ -186,7 +192,8 @@ def query_for_lrs_vcfs(
     # and prefer them over the single-sample VCFs of parents in joint-called trios
     if verbose:
         logger.info(
-            f'Finding {variant_types} joint-called VCFs in {dataset_name} for sequencing types: {sequencing_types},'
+            f'Finding {variant_types} joint-called VCFs in {dataset_name} for '
+            f' sequencing types: {sequencing_types}, sequence platforms: {sequencing_platforms},'
             f' analysis types: {analysis_types}, callers: {variant_callers}, pipeface versions: {pipeface_versions}',
         )
     joint_called_vcfs: dict[str, dict] = {}
@@ -196,6 +203,7 @@ def query_for_lrs_vcfs(
         variables={
             'dataset': dataset_name,
             'seqTypes': sequencing_types,
+            'platforms': sequencing_platforms,
             'analysisType': analysis_types,
             'metaFilter': meta_filter
         },
@@ -239,14 +247,18 @@ def query_for_lrs_vcfs(
 
 def query_for_lrs_mappings(
     dataset_names: list[str],
-    sequencing_types: list[str]
+    sequencing_types: list[str],
+    sequencing_platforms: list[str],
     ) -> dict[str, dict[str, str]]:
     """
     Query metamist for the LRS ID to SG ID mapping, and it's associated participant's sex
     """
     lrs_mappings = {}
     for dataset in dataset_names:
-        query_results = query(LRS_IDS_QUERY, variables={'dataset': dataset, 'seqTypes': sequencing_types})
+        query_results = query(
+            LRS_IDS_QUERY,
+            variables={'dataset': dataset, 'seqTypes': sequencing_types, 'platforms': sequencing_platforms}
+        )
         for sg in query_results['project']['sequencingGroups']:
             sample = sg['sample']
             participant = sample['participant']
