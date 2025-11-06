@@ -7,6 +7,7 @@ gencode_gtf_file = 'gs://cpg-common-main/references/hg38/v0/gencode_47.gtf.gz'
 # Options for filtering Metamist queries for sequencing groups and their analysis
 [workflow.query_filters]
 # sequencing_types = [ 'genome', 'adaptive_sampling', ]
+# sequencing_platforms = [ 'pacbio', 'oxford-nanopore', ]
 # analysis_types = [ 'vcf', 'pacbio_vcf',]
 # variant_types = [ 'SNV', 'snp_indel', ]
 # variant_callers = [ 'deeptrio', 'deepvariant', ]
