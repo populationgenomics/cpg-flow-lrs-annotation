@@ -19,6 +19,7 @@ def export_mt_to_elasticsearch(
     es_export_job = batch.new_job(job_name, attributes=job_attrs)
     es_export_job.image(config_retrieve(['workflow', 'driver_image']))
     es_export_job.storage(f'{req_storage}Gi')
+    es_export_job.spot(is_spot=config_retrieve(['elasticsearch', 'spot_instance'], default=True))
     es_export_job = get_resource_overrides_for_job(es_export_job, 'export_mt_to_elasticsearch')
 
     # localise the MT
