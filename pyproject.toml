@@ -21,7 +21,7 @@ classifiers=[
 ]
 
 dependencies=[
-    'cpg-flow~=1.1.1',
+    'cpg-flow~=1.2',
     'elasticsearch==8.*',
     'pyfaidx>=0.8.1.1',
 ]
@@ -130,9 +130,9 @@ search = 'version="{current_version}"'
 replace = 'version="{new_version}"'
 
 [[tool.bumpversion.files]]
-filename = ".github/workflows/docker.yaml"
-search = "VERSION: {current_version}"
-replace = "VERSION: {new_version}"
+filename = "Dockerfile"
+search = "{current_version}"
+replace = "{new_version}"
 
 [[tool.bumpversion.files]]
 filename = "README.md"
