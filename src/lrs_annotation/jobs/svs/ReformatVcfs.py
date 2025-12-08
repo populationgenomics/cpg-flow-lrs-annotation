@@ -33,6 +33,25 @@ def reformat_svs_vcf_with_bcftools(
     )
 
     reformatting_job = get_resource_overrides_for_job(reformatting_job, 'reformat_svs_vcf')
+
+    # First, validate that sample ID(s) from the input VCF exist in the reheadering / mapping file
+    reformatting_job.command(f'''
+        # Extract sample IDs from VCF
+        SAMPLE_IDS=$(bcftools query -l {local_vcf})
+
+        # Check each sample ID exists in mapping file
+        for sample_id in $SAMPLE_IDS; do
+            if ! grep -q "^$sample_id\\s" {local_id_mapping}; then
+                echo "ERROR: Sample ID '$sample_id' not found in mapping file {lrs_sg_id_mapping_path}"
+                exit 1
+            else
+                echo "✓ Sample ID '$sample_id' found in mapping file"
+            fi
+        done
+
+        echo "All sample IDs validated successfully"
+    ''')  # noqa: Q001
+
     reformatting_job.command(
         f'bcftools view {local_vcf} -Ou | '
         f'bcftools reheader --samples {local_id_mapping} | '
