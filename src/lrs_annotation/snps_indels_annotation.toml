@@ -3,6 +3,7 @@ name = 'snps_indels_annotation'
 
 [workflow.query_filters]
 # sequencing_types = [ 'genome', 'adaptive_sampling', ]
+# sequencing_platforms = [ 'pacbio', 'oxford-nanopore', ]
 # analysis_types = [ 'vcf', 'pacbio_vcf',]
 # variant_types = [ 'SNV', 'snp_indel', ]
 # variant_callers = [ 'deeptrio', 'deepvariant', ]
