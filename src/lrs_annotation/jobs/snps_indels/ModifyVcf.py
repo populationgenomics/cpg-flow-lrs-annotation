@@ -15,6 +15,7 @@ def bcftools_reformat(
     """
     Reformat SNPs and Indels VCFs using bcftools.
 
+    First validates that sample IDs in the VCF exist in the mapping file.
     Reheader the VCF to replace the LRS IDs with the SG IDs with bcftools reheader.
     Normalise the VCF with the reference genome and bcftools norm.
     Uppercases the allele strings with awk.
@@ -34,8 +35,26 @@ def bcftools_reformat(
     job.declare_resource_group(
         vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
     )
-
     job = get_resource_overrides_for_job(job, 'reformat_snps_indels_vcf')
+
+    # First, validate that sample ID(s) from the input VCF exist in the reheadering / mapping file
+    job.command(f'''
+        # Extract sample IDs from VCF
+        SAMPLE_IDS=$(bcftools query -l {local_vcf})
+
+        # Check each sample ID exists in mapping file
+        for sample_id in $SAMPLE_IDS; do
+            if ! grep -q "^$sample_id\\s" {local_id_mapping}; then
+                echo "ERROR: Sample ID '$sample_id' not found in mapping file {lrs_sg_id_mapping_path}"
+                exit 1
+            else
+                echo "✓ Sample ID '$sample_id' found in mapping file"
+            fi
+        done
+
+        echo "All sample IDs validated successfully"
+    ''')  # noqa: Q001
+
     job.command(
         f'bcftools reheader --samples {local_id_mapping} {local_vcf} | '
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
