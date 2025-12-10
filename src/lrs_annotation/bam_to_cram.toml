@@ -1,6 +1,8 @@
 [workflow]
 name = 'bam_to_cram'
 
+populate_assays = true
+
 [workflow.bam_to_cram]
 analysis_type = 'cram'
 

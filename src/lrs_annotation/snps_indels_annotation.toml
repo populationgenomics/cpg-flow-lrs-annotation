@@ -7,7 +7,7 @@ name = 'snps_indels_annotation'
 # analysis_types = [ 'vcf', 'pacbio_vcf',]
 # variant_types = [ 'SNV', 'snp_indel', ]
 # variant_callers = [ 'deeptrio', 'deepvariant', ]
-# pipeface_versions = [ 'v0.8.0', ]
+# pipeface_versions = [ 'v0.8.0', 'v0.9.0', 'v0.9.1', 'v0.9.2', 'v0.9.4', 'v0.10.0', ]
 # prefer_joint_called = false
 # parental_id_suffixes = [ '01', '02', ]
 
