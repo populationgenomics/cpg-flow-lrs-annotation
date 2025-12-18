@@ -160,6 +160,8 @@ def annotate_cohort(
         mt = mt.annotate_globals(
             sampleType={
                 'genome': 'WGS',
+                'adaptive_sampling': 'WGS',
+                'amplicon': 'WGS',
                 'exome': 'WES',
                 'single_cell': 'RNA',
             }.get(sequencing_type, ''),

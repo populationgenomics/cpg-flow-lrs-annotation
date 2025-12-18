@@ -204,6 +204,8 @@ def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpo
         mt = mt.annotate_globals(
             sampleType={
                 'genome': 'WGS',
+                'adaptive_sampling': 'WGS',
+                'amplicon': 'WGS',
                 'exome': 'WES',
                 'single_cell': 'RNA',
             }.get(sequencing_type, ''),
