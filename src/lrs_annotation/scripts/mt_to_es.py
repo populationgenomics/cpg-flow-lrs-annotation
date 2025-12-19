@@ -251,7 +251,6 @@ def main():
     parser.add_argument('--index', help='ES index name', required=True)
     parser.add_argument('--flag', help='ES index "DONE" file path')
     args = parser.parse_args()
-    logger.basicConfig(level=logger.INFO)
 
     password: str | None = read_secret(
         project_id=config_retrieve(['elasticsearch', 'password_project_id'], ''),
