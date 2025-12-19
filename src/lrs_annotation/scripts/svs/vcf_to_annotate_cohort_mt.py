@@ -2,7 +2,8 @@
 Hail Query functions for seqr loader.
 """
 from argparse import ArgumentParser
-import logging
+
+from loguru import logger
 
 import hail as hl
 from itertools import chain, islice
@@ -133,7 +134,7 @@ def parse_gtf_from_local(gtf_path: str, chunk_size: int | None = None) -> hl.dic
         the gene lookup dictionary as a Hail DictExpression
     """
     gene_id_mapping = {}
-    logging.info(f'Loading {gtf_path}')
+    logger.info(f'Loading {gtf_path}')
     with gzip.open(gtf_path, 'rt') as gencode_file:
         # iterate over this file and do all the things
         for i, line in enumerate(gencode_file):
@@ -156,7 +157,7 @@ def parse_gtf_from_local(gtf_path: str, chunk_size: int | None = None) -> hl.dic
             gene_id_mapping[info_fields['gene_name']] = info_fields['gene_id'].split('.')[0]
 
     all_keys = list(gene_id_mapping.keys())
-    logging.info(f'Completed ingestion of gene-ID mapping, {len(all_keys)} entries')
+    logger.info(f'Completed ingestion of gene-ID mapping, {len(all_keys)} entries')
     if chunk_size is None:
         return [hl.literal(gene_id_mapping)]
 
@@ -180,8 +181,6 @@ def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpo
         checkpoint (str): CHECKPOINT!@!!
     """
     init_batch(**get_init_batch_args_for_job('annotate_cohort_sv'))
-    logger = logging.getLogger('annotate_cohort_sv')
-    logger.setLevel(logging.INFO)
 
     logger.info(f'Importing SV VCF {vcf_path}')
     mt = hl.import_vcf(
@@ -205,6 +204,8 @@ def annotate_cohort_sv(vcf_path: str, out_mt_path: str, gencode_gz: str, checkpo
         mt = mt.annotate_globals(
             sampleType={
                 'genome': 'WGS',
+                'adaptive_sampling': 'WGS',
+                'amplicon': 'WGS',
                 'exome': 'WES',
                 'single_cell': 'RNA',
             }.get(sequencing_type, ''),

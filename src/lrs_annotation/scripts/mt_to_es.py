@@ -4,7 +4,6 @@ https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7
 https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/luigi_pipeline/lib/hail_tasks.py
 """
 
-import logging
 import math
 import time
 from argparse import ArgumentParser
@@ -15,6 +14,7 @@ import elasticsearch
 
 import hail as hl
 
+from loguru import logger
 from cpg_utils import to_path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
@@ -128,7 +128,7 @@ class ElasticsearchClient:
         self.es = elasticsearch.Elasticsearch(_host, basic_auth=(self._es_username, self._es_password))
 
         # check connection
-        logging.info(self.es.info())
+        logger.info(self.es.info())
 
     def wait_for_shard_transfer(self, index_name, num_attempts=1000):
         """
@@ -138,10 +138,10 @@ class ElasticsearchClient:
         for _ in range(num_attempts):
             shards = self.es.cat.shards(index=index_name)
             if LOADING_NODES_NAME not in shards:
-                logging.warning(f"Shards are on {shards}")
+                logger.warning(f"Shards are on {shards}")
                 return
-            logging.warning(
-                "Waiting for {} shards to transfer off the es-data-loading nodes: \n{}".format(  # noqa: G001
+            logger.warning(
+                "Waiting for {} shards to transfer off the es-data-loading nodes: \n{}".format(
                     len(shards.strip().split("\n")),
                     shards,
                 ),
@@ -167,7 +167,7 @@ class ElasticsearchClient:
         index_mapping = {'properties': elasticsearch_schema}
 
         if _meta:
-            logging.info(f'==> index _meta: {_meta}')
+            logger.info(f'==> index _meta: {_meta}')
             index_mapping['_meta'] = _meta
 
         if not self.es.indices.exists(index=index_name):
@@ -182,8 +182,8 @@ class ElasticsearchClient:
                 },
             }
 
-            logging.info(f'create_mapping - elasticsearch schema: \n{elasticsearch_schema}')
-            logging.info(f'==> creating elasticsearch index {index_name}')
+            logger.info(f'create_mapping - elasticsearch schema: \n{elasticsearch_schema}')
+            logger.info(f'==> creating elasticsearch index {index_name}')
 
             self.es.indices.create(index=index_name, body=body)
 
@@ -223,7 +223,7 @@ class ElasticsearchClient:
                 rename_dict[field_name] = encoded_name
 
         for original_name, encoded_name in rename_dict.items():
-            logging.info(f'Encoding column name {original_name} to {encoded_name}')
+            logger.info(f'Encoding column name {original_name} to {encoded_name}')
 
         table = table.rename(rename_dict)
 
@@ -251,7 +251,7 @@ def main():
     parser.add_argument('--index', help='ES index name', required=True)
     parser.add_argument('--flag', help='ES index "DONE" file path')
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    logger.basicConfig(level=logger.INFO)
 
     password: str | None = read_secret(
         project_id=config_retrieve(['elasticsearch', 'password_project_id'], ''),
@@ -261,13 +261,13 @@ def main():
 
     # no password, but we fail gracefully
     if password is None:
-        logging.warning(f'No permission to access ES password, skipping creation of {args.index}')
+        logger.warning(f'No permission to access ES password, skipping creation of {args.index}')
         sys.exit(0)
 
     host = config_retrieve(['elasticsearch', 'host'])
     port = config_retrieve(['elasticsearch', 'port'])
     username = config_retrieve(['elasticsearch', 'username'])
-    logging.info(f'Connecting to ElasticSearch: host="{host}", port="{port}", user="{username}"')
+    logger.info(f'Connecting to ElasticSearch: host="{host}", port="{port}", user="{username}"')
 
     ncpu = config_retrieve(['workflow', 'ncpu'], 4)
     hl.context.init_spark(master=f'local[{ncpu}]', quiet=True)
@@ -275,7 +275,7 @@ def main():
 
     mt = hl.read_matrix_table(args.mt_path)
 
-    logging.info('Getting rows and exporting to the ES')
+    logger.info('Getting rows and exporting to the ES')
 
     # get the rows, flattened, stripped of key and VEP annotations
     row_ht = elasticsearch_row(mt)

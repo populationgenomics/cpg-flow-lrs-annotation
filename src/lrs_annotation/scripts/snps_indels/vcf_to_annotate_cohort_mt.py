@@ -2,7 +2,7 @@
 Hail Query functions for seqr loader.
 """
 from argparse import ArgumentParser
-import logging
+from loguru import logger
 
 import hail as hl
 
@@ -26,9 +26,6 @@ def annotate_cohort(
     """
     init_batch(**get_init_batch_args_for_job('annotate_cohort_snps_indels'))
 
-    # tune the logger correctly
-    logging.getLogger().setLevel(logging.INFO)
-
     # hail.zulipchat.com/#narrow/stream/223457-Hail-Batch-support/topic/permissions.20issues/near/398711114
     # don't override the block size, as it explodes the number of partitions when processing TB+ datasets
     # Each partition comes with some computational overhead, it's to be seen whether the standard block size
@@ -41,12 +38,12 @@ def annotate_cohort(
         array_elements_required=False,
     )
     mt.checkpoint(output=str(checkpoint_prefix) + 'mt-imported.mt', overwrite=True)
-    logging.info(f'Imported VCF {vcf_path} as {mt.n_partitions()} partitions')
+    logger.info(f'Imported VCF {vcf_path} as {mt.n_partitions()} partitions')
 
     # Annotate VEP. Do it before splitting multi, because we run VEP on unsplit VCF,
     # and hl.split_multi_hts can handle multiallelic VEP field.
     vep_ht = hl.read_table(vep_ht_path)
-    logging.info(
+    logger.info(
         f'Adding VEP annotations into the Matrix Table from {vep_ht_path}.'
         f'VEP loaded as {vep_ht.n_partitions()} partitions',
     )
@@ -54,7 +51,7 @@ def annotate_cohort(
 
     # Remove any contigs not in the 22 autosomes, X, Y, M
     if remove_invalid_contigs:
-        logging.info('Removing invalid contigs')
+        logger.info('Removing invalid contigs')
         # fmt: off
         chromosomes = [
             '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13',
@@ -74,13 +71,16 @@ def annotate_cohort(
     ref_ht = hl.read_table(reference_path('seqr_combined_reference_data'))
     clinvar_ht = hl.read_table(reference_path('seqr_clinvar'))
 
+    logger.info(f'Imported {reference_path("seqr_combined_reference_data")} as {ref_ht.n_partitions()} partitions')
+    logger.info(f'Imported {reference_path("seqr_clinvar")} as {clinvar_ht.n_partitions()} partitions')
+
     # If the 'AF' field is already in the entries, we should drop it
     if 'AF' in list(mt.entry):
-        logging.info('AF field already present in the entries, dropping it')
+        logger.info('AF field already present in the entries, dropping it')
         mt = mt.drop('AF')
-    logging.info('Annotating with seqr-loader fields: round 1')
+    logger.info('Annotating with seqr-loader fields: round 1')
 
-    logging.info('Annotating with clinvar and munging annotation fields')
+    logger.info('Annotating with clinvar and munging annotation fields')
     mt = mt.annotate_rows(
         # still taking just a single value here for downstream compatibility in Seqr
         AC=mt.info.AC[0],
@@ -105,7 +105,7 @@ def annotate_cohort(
     )
 
     # this was previously executed in the MtToEs job, as it wasn't possible on QoB
-    logging.info('Adding GRCh37 coords')
+    logger.info('Adding GRCh37 coords')
     liftover_path = reference_path('liftover_38_to_37')
     rg37 = hl.get_reference('GRCh37')
     rg38 = hl.get_reference('GRCh38')
@@ -116,7 +116,7 @@ def annotate_cohort(
     if 'InbreedingCoeff' in mt.info:
         mt = mt.annotate_rows(info=mt.info.drop('InbreedingCoeff'))
 
-    logging.info(
+    logger.info(
         'Annotating with seqr-loader fields: round 2 '
         '(expanding sortedTranscriptConsequences, ref_data, clinvar_data)',
     )
@@ -160,15 +160,17 @@ def annotate_cohort(
         mt = mt.annotate_globals(
             sampleType={
                 'genome': 'WGS',
+                'adaptive_sampling': 'WGS',
+                'amplicon': 'WGS',
                 'exome': 'WES',
                 'single_cell': 'RNA',
             }.get(sequencing_type, ''),
         )
 
-    logging.info('Done:')
+    logger.info('Done. Final Matrixtable structure:')
     mt.describe()
     mt.write(out_mt_path, overwrite=True)
-    logging.info(f'Written final matrix table into {out_mt_path}')
+    logger.info(f'Wrote final matrix table to {out_mt_path}')
 
 
 def cli_main():

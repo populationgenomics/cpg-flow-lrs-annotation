@@ -351,7 +351,8 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
 
         outputs = self.expected_outputs(dataset)
 
-        checkpoint_prefix = dataset.tmp_prefix() / 'snps_indels' / 'mt' / 'checkpoints'
+        sg_hash = workflow.get_workflow().output_version
+        checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
 
         jobs = annotate_dataset_jobs(
             mt_path=mt_path,
