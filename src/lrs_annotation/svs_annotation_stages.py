@@ -372,7 +372,8 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortSVsMtFromVcfWithHail, key='mt')
         outputs = self.expected_outputs(dataset)
 
-        checkpoint_prefix = dataset.tmp_prefix() / 'svs' / 'checkpoints'
+        sg_hash = workflow.get_workflow().output_version
+        checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'svs' / 'mt' / 'checkpoints'
 
         jobs = annotate_dataset_jobs_sv(
             mt_path=mt_path,
