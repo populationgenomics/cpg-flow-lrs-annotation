@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 
 from cpg_flow.workflow import run_workflow
 
-from lrs_annotation.bam_to_cram_stages import ConvertBamToCram
+from lrs_annotation.bam_to_cram_stages import ConvertBamToCram, CramQcSomalier
 from lrs_annotation.snps_indels_annotation_stages import ExportSnpsIndelsMtToESIndex
 from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex
 
@@ -23,7 +23,7 @@ def cli_main():
     args = parser.parse_args()
 
     if args.workflow == 'bam_to_cram':
-        stages = [ConvertBamToCram]
+        stages = [ConvertBamToCram, CramQcSomalier]
     elif args.workflow == 'snps_indels':
         stages = [ExportSnpsIndelsMtToESIndex]
     elif args.workflow == 'svs':
