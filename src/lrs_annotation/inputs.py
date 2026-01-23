@@ -42,7 +42,7 @@ LRS_IDS_QUERY = gql(
       sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}, platform: {in_: $platforms}) {
           id
           sample {
-            externalId
+            externalIds
             meta
             participant {
               externalId
@@ -262,14 +262,42 @@ def query_for_lrs_mappings(
         for sg in query_results['project']['sequencingGroups']:
             sample = sg['sample']
             participant = sample['participant']
-            lrs_id = sample['meta'].get('lrs_id', None)
+            lrs_id = get_lrs_id_from_sample(sample, sequencing_types, sequencing_platforms)
             if not lrs_id:
                 logger.warning(
-                    f'{dataset} :: No LRS ID found for {participant["externalId"]} - {sample["externalId"]}',
+                    f'{dataset} :: No LRS ID found for {participant["externalId"]} - {sample["externalIds"][""]}',
                 )
                 continue
             lrs_mappings[lrs_id] = {'sg_id': sg['id'], 'sex': participant['reportedSex']}
     return lrs_mappings
+
+
+def get_lrs_id_from_sample(
+    sample: dict[str, dict[str, str]],
+    sequencing_types: list[str],
+    sequencing_platforms: list[str],
+    ) -> str | None:
+    """
+    Get the LRS ID from the sample's external IDs or meta field.
+
+    Mainly used for handling samples with multiple LRS IDs
+    across different sequencing types/platforms.
+
+    The LRS ID is expected to be in the sample's external IDs
+    keyed by the sequencing platform and sequencing type, e.g.
+     - 'oxford-nanopore_genome_lrs_id'
+     - 'pacbio_genome_lrs_id'
+    """
+    ext_ids: dict[str, str] = sample['externalIds']
+    # Only expect one sequencing type/platform per workflow run here
+    seq_string = f'{sequencing_platforms[0]}_{sequencing_types[0]}_lrs_id'
+    if seq_string in ext_ids:
+        return ext_ids[seq_string]
+    # Fallback to generic lrs_id key
+    if 'lrs_id' in ext_ids:
+        return ext_ids['lrs_id']
+    # Final fallback to sample's meta field
+    return sample['meta'].get('lrs_id', None)
 
 
 def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str] | dict]:
