@@ -55,7 +55,7 @@ def get_query_filter_from_config(field_name: str, make_tuple = True) -> tuple[st
     Returns tuples by default, because they are needed for use with cached functions.
     """
     if values := config_retrieve(
-        ['workflow', 'query_filter', field_name],
+        ['workflow', 'query_filters', field_name],
         default=None,
     ):
         if isinstance(values, str):
