@@ -389,7 +389,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
 @stage.stage(
     required_stages=[SubsetSVsMtToDatasetWithHail],
     analysis_type='es-index',
-    analysis_keys=['index_name'],
+    analysis_keys=['done_flag'],
     update_analysis_meta=lambda x: {'seqr-dataset-type': 'SV'},  # noqa: ARG005
 )
 class ExportSVsMtToElasticIndex(stage.DatasetStage):
