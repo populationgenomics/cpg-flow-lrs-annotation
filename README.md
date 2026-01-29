@@ -1,6 +1,6 @@
 # CPG-Flow - Long Read Sequencing Annotation for seqr
 
-Version 0.2.6
+Version 0.2.7
 
 A CPG workflow for creating annotated callsets from long read data, using the [cpg-flow](https://github.com/populationgenomics/cpg-flow) pipeline framework.
 
