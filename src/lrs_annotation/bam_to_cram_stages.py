@@ -2,13 +2,11 @@
 Workflow for annotating long-read SVs data into a seqr-ready format.
 """
 
+from cpg_flow import stage, targets
+from cpg_flow.filetypes import CramPath
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import get_batch
-
-from cpg_flow import stage, targets
-from cpg_flow.filetypes import CramPath
-
 from jobs.BamToCram import bam_to_cram
 
 

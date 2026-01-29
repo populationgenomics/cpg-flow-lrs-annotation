@@ -124,9 +124,7 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str): 
 
     # read and write compressed
     with gzip.open(file_in, 'rt') as f, gzip.open(file_out, 'wt') as f_out:
-
         for index, line in enumerate(f):
-
             if index % 10000 == 0:
                 print(f'Lines processed: {index}')
 
@@ -165,9 +163,9 @@ def modify_sv_vcf(file_in: str, file_out: str, fa: str, sex_mapping_file: str): 
             if ref not in ('N', '.'):
                 # If using the hg38 masked reference, the base will always be upper case
                 # So make sure the comparison to the SV VCF REF is upper case too
-                assert (
-                    new_base == ref[0].upper()
-                ), f'Discrepancy between faidx and SV VCF at {chrom}:{position}: {new_base}, {ref}'
+                assert new_base == ref[0].upper(), (
+                    f'Discrepancy between faidx and SV VCF at {chrom}:{position}: {new_base}, {ref}'
+                )
 
             # replace the REF String
             l_split[3] = new_base

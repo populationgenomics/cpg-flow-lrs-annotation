@@ -1,11 +1,10 @@
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
 
-from lrs_annotation.scripts.snps_indels import annotate_dataset_mt
 from lrs_annotation.scripts import subset_mt_to_sgs
+from lrs_annotation.scripts.snps_indels import annotate_dataset_mt
 
 
 def annotate_dataset_jobs(

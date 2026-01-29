@@ -88,11 +88,7 @@ fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN
 
 ignore = [
     "ANN001", # Missing type annotation for function argument
-    "ANN101", # Missing type annotation for self in method
-    "ANN102", # Missing type annotation for `cls` in classmethod
     "ANN201", # Missing return type annotation for public function
-    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
-    "ANN204", # Missing type annotation for special method `__init__`
     "COM812", # Trailing comma prohibited
     "E731", # Do not assign a lambda expression, use a def
     "G004", # Logging statement uses f-string
@@ -102,8 +98,6 @@ ignore = [
     "PLR0912", # Too many branches (> 12)
     "PLR0913", # Too many arguments in function (> 5)
     "C901", # method is too complex (> 10 conditions)
-    "N999", # invalid module name (not lower-case and potholes)
-    "I001", # Import block is un-sorted or un-formatted (to remove soon)
 ]
 
 [tool.ruff.lint.isort]

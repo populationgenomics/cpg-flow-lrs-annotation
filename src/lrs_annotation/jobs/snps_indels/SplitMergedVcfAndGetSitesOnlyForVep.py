@@ -1,16 +1,15 @@
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
+from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import can_reuse, dependency_handler
-from cpg_flow.resources import STANDARD, HIGHMEM
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
+from hailtop.batch.job import Job
 
 from lrs_annotation.utils import get_intervals_from_bed, get_resource_overrides_for_job
 
 from .PicardIntervals import get_intervals
+
 
 def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
     b: hb.Batch,
@@ -157,6 +156,7 @@ def add_split_vcf_job(
     j.command('wait && echo "All parts written"')
 
     return j
+
 
 def add_make_sitesonly_job(
     b: hb.Batch,
