@@ -80,7 +80,7 @@ class ModifyVcf(stage.SequencingGroupStage):
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
         """
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
@@ -130,7 +130,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
             'index': self.tmp_prefix / 'snps_indels' / 'merged_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
@@ -182,7 +182,7 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
             ),
         }
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Submit jobs.
         """
@@ -233,7 +233,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         """
         return {'ht': self.tmp_prefix / 'snps_indels' / 'vep.ht'}
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Submit jobs.
         """
@@ -277,7 +277,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         """
         return {'mt': self.tmp_prefix / 'snps_indels' / 'cohort.mt'}
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         queue job(s) to rearrange the annotations prior to Seqr transformation
         """
@@ -326,7 +326,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             'mt': (dataset.prefix() / 'mt' / f'{mt_name}.mt'),
         }
 
-    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Subsets the whole MT to this cohort only
         Then brings a range of genotype data into row annotations
@@ -391,7 +391,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             'done_flag': dataset.prefix() / 'snps_indels' / 'es' / f'{index_name}.done',
         }
 
-    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Uses the non-DataProc MT-to-ES conversion script
         """
@@ -415,12 +415,10 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         outputs = self.expected_outputs(dataset)
 
         # get the absolute path to the MT
-        mt_path = str(
-            inputs.as_path(target=dataset, stage=SubsetMtToDatasetWithHail, key='mt')
-        )
+        mt_path = inputs.as_str(target=dataset, stage=SubsetMtToDatasetWithHail, key='mt')
 
         # get the expected outputs as Strings
-        index_name = str(outputs['index_name'])
+        index_name = outputs['index_name']
         flag_name = str(outputs['done_flag'])
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
@@ -440,4 +438,4 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
         )
 
-        return self.make_outputs(dataset, data=outputs['index_name'], jobs=job)
+        return self.make_outputs(dataset, data=outputs, jobs=job)

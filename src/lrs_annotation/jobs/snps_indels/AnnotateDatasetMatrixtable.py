@@ -13,8 +13,7 @@ def annotate_dataset_jobs(
     sg_ids: list[str],
     out_mt_path: Path,
     tmp_prefix: Path,
-    job_attrs: dict | None = None,
-    depends_on: list[Job] | None = None,
+    job_attrs: dict[str, str],
 ) -> list[Job]:
     """
     Split mt by dataset and annotate dataset-specific fields (only for those datasets
@@ -28,7 +27,7 @@ def annotate_dataset_jobs(
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 
-    subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
+    subset_j = get_batch().new_job('Subset cohort to dataset', job_attrs | {'tool': 'hail query'})
     subset_j.image(config_retrieve(['workflow', 'driver_image']))
     assert sg_ids
     subset_j.command(
@@ -39,8 +38,6 @@ def annotate_dataset_jobs(
             --out_mt_path {subset_mt_path}
         """
     )
-    if depends_on:
-        subset_j.depends_on(*depends_on)
 
     annotate_j = get_batch().new_job('Annotate dataset', (job_attrs or {}) | {'tool': 'hail query'})
     annotate_j.image(config_retrieve(['workflow', 'driver_image']))
@@ -52,4 +49,5 @@ def annotate_dataset_jobs(
         """
     )
     annotate_j.depends_on(subset_j)
+
     return [subset_j, annotate_j]
