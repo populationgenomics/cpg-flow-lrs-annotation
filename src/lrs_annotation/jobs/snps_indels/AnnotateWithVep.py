@@ -6,7 +6,7 @@ from textwrap import dedent
 from typing import Literal
 from lrs_annotation.scripts.snps_indels import vep_json_to_ht
 from lrs_annotation.jobs.snps_indels.GatherVcfs import gather_vcfs
-from cpg_flow.utils import can_reuse
+from cpg_flow.utils import can_reuse, dependency_handler
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, reference_path
 
@@ -63,13 +63,12 @@ def add_vep_jobs(
             jobs.append(vep_one_job)
 
     if to_hail_table:
-        j = gather_vep_json_to_ht(
+        gather_jobs = gather_vep_json_to_ht(
             b=b,
             vep_results_paths=result_part_paths,
             out_path=out_path,
             job_attrs=job_attrs,
         )
-        gather_jobs = [j]
     elif scatter_count != 1:
         assert len(result_part_paths) == scatter_count
         gather_jobs = gather_vcfs(b=b, input_vcfs=result_part_paths, out_vcf_path=out_path)
@@ -77,10 +76,7 @@ def add_vep_jobs(
         print('no need to merge VEP results')
         gather_jobs = []
 
-    for j in gather_jobs:
-        j.depends_on(*jobs)
-
-    jobs.extend(gather_jobs)
+    dependency_handler(gather_jobs, jobs)
 
     return jobs
 

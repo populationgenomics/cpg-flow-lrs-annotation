@@ -9,9 +9,9 @@ def export_mt_to_elasticsearch(
     mt_path: str,
     index_name: str,
     flag_name: str,
-    req_storage: str,
+    req_storage: int,
     job_name: str,
-    job_attrs: dict | None = None,
+    job_attrs: dict[str, str],
 ):
     """
     Export the annotated Matrixtable to ElasticSearch.
