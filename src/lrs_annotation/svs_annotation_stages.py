@@ -459,4 +459,4 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
         )
 
-        return self.make_outputs(dataset, data=outputs['index_name'], jobs=job)
+        return self.make_outputs(dataset, data=outputs, jobs=job)
