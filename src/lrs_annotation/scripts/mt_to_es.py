@@ -5,19 +5,17 @@ https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7
 """
 
 import math
+import sys
 import time
 from argparse import ArgumentParser
 from io import StringIO
-import sys
 
 import elasticsearch
-
 import hail as hl
-
-from loguru import logger
 from cpg_utils import to_path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
+from loguru import logger
 
 # CONSTANTS stolen from https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/elasticsearch_utils.py#L13
 # make encoded values as human-readable as possible
@@ -37,14 +35,14 @@ ES_FIELD_NAME_SPECIAL_CHAR_MAP = {
 }
 
 HAIL_TYPE_TO_ES_TYPE_MAPPING = {
-    hl.tint: "integer",
-    hl.tint32: "integer",
-    hl.tint64: "long",
-    hl.tfloat: "double",
-    hl.tfloat32: "float",
-    hl.tfloat64: "double",
-    hl.tstr: "keyword",
-    hl.tbool: "boolean",
+    hl.tint: 'integer',
+    hl.tint32: 'integer',
+    hl.tint64: 'long',
+    hl.tfloat: 'double',
+    hl.tfloat32: 'float',
+    hl.tfloat64: 'double',
+    hl.tstr: 'keyword',
+    hl.tbool: 'boolean',
 }
 
 # used in wait_for_shard_transfer
@@ -59,16 +57,16 @@ def _elasticsearch_mapping_for_type(dtype) -> dict:
     https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/elasticsearch_utils.py#L53
     """
     if isinstance(dtype, hl.tstruct):
-        return {"properties": {field: _elasticsearch_mapping_for_type(dtype[field]) for field in dtype.fields}}
+        return {'properties': {field: _elasticsearch_mapping_for_type(dtype[field]) for field in dtype.fields}}
     if isinstance(dtype, hl.tarray | hl.tset):
         element_mapping = _elasticsearch_mapping_for_type(dtype.element_type)
         if isinstance(dtype.element_type, hl.tstruct):
-            element_mapping["type"] = "nested"
+            element_mapping['type'] = 'nested'
         return element_mapping
     if isinstance(dtype, hl.tlocus):
-        return {"type": "object", "properties": {"contig": {"type": "keyword"}, "position": {"type": "integer"}}}
+        return {'type': 'object', 'properties': {'contig': {'type': 'keyword'}, 'position': {'type': 'integer'}}}
     if dtype in HAIL_TYPE_TO_ES_TYPE_MAPPING:
-        return {"type": HAIL_TYPE_TO_ES_TYPE_MAPPING[dtype]}
+        return {'type': HAIL_TYPE_TO_ES_TYPE_MAPPING[dtype]}
 
     # tdict, ttuple, tlocus, tinterval, tcall
     raise NotImplementedError
@@ -112,7 +110,7 @@ class ElasticsearchClient:
     Clone of https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/hail_elasticsearch_client.py#L25
     """
 
-    def __init__(self, host: str, port: str, es_username: str, es_password: str):
+    def __init__(self, host: str, port: str, es_username: str, es_password: str) -> None:
         """
         This is a complete stripping of the ES Client in Hail Batch, which is thin-ish wrapper around a pile of
         hail methods
@@ -138,11 +136,11 @@ class ElasticsearchClient:
         for _ in range(num_attempts):
             shards = self.es.cat.shards(index=index_name)
             if LOADING_NODES_NAME not in shards:
-                logger.warning(f"Shards are on {shards}")
+                logger.warning(f'Shards are on {shards}')
                 return
             logger.warning(
-                "Waiting for {} shards to transfer off the es-data-loading nodes: \n{}".format(
-                    len(shards.strip().split("\n")),
+                'Waiting for {} shards to transfer off the es-data-loading nodes: \n{}'.format(
+                    len(shards.strip().split('\n')),
                     shards,
                 ),
             )
@@ -214,7 +212,7 @@ class ElasticsearchClient:
             encoded_name = field_name
 
             # optionally replace . with _ in a non-reversible way
-            encoded_name = encoded_name.replace(".", '_')
+            encoded_name = encoded_name.replace('.', '_')
 
             # replace all other special chars with an encoding that's uglier, but reversible
             encoded_name = encode_field_name(encoded_name)
@@ -228,7 +226,7 @@ class ElasticsearchClient:
         table = table.rename(rename_dict)
 
         # create elasticsearch index with fields that match the ones in the table
-        elasticsearch_schema = _elasticsearch_mapping_for_type(table.key_by().row_value.dtype)["properties"]
+        elasticsearch_schema = _elasticsearch_mapping_for_type(table.key_by().row_value.dtype)['properties']
 
         index_name = kwargs['index_name']
         assert index_name
@@ -245,7 +243,6 @@ class ElasticsearchClient:
 
 
 def main():
-
     parser = ArgumentParser(description='Argument Parser for the ES generation script')
     parser.add_argument('--mt_path', help='MT path name', required=True)
     parser.add_argument('--index', help='ES index name', required=True)

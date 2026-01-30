@@ -2,13 +2,12 @@
 Convert BAM to CRAM.
 """
 
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
-
+from cpg_flow.resources import STANDARD
 from cpg_utils import to_path
 from cpg_utils.config import config_retrieve, image_path, reference_path
 from cpg_utils.hail_batch import Batch, command
-from cpg_flow.resources import STANDARD
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
 
 
 def bam_to_cram(
@@ -52,7 +51,7 @@ def bam_to_cram(
 
     cmd = f"""
     samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} | \
-    tee {j.sorted_cram["cram"]} | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram["cram.crai"]}
+    tee {j.sorted_cram['cram']} | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram['cram.crai']}
     """
     j.command(command(cmd, monitor_space=True))
 

@@ -1,9 +1,11 @@
+from typing import Any
 
-from hailtop.batch.job import Job
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
-from lrs_annotation.utils import add_gatk_sv_jobs, get_references, get_images
-from typing import Any
+from hailtop.batch.job import Job
+
+from lrs_annotation.utils import add_gatk_sv_jobs, get_images, get_references
+
 
 def queue_annotate_sv_jobs(
     dataset_name: str,

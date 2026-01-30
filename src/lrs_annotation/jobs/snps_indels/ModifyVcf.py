@@ -1,10 +1,9 @@
-
-from hailtop.batch.job import Job
-
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
 
 from lrs_annotation.utils import get_resource_overrides_for_job
+
 
 def bcftools_reformat(
     vcf_path: str,
@@ -32,13 +31,11 @@ def bcftools_reformat(
     # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
     job = get_batch().new_job(job_name, job_attrs)
     job.image(image=config_retrieve(['images', 'bcftools']))
-    job.declare_resource_group(
-        vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
-    )
+    job.declare_resource_group(vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'})
     job = get_resource_overrides_for_job(job, 'reformat_snps_indels_vcf')
 
     # First, validate that sample ID(s) from the input VCF exist in the reheadering / mapping file
-    job.command(f'''
+    job.command(f"""
         # Extract sample IDs from VCF
         SAMPLE_IDS=$(bcftools query -l {local_vcf})
 
@@ -53,15 +50,15 @@ def bcftools_reformat(
         done
 
         echo "All sample IDs validated successfully"
-    ''')  # noqa: Q001
+    """)
 
     job.command(
         f'bcftools reheader --samples {local_id_mapping} {local_vcf} | '
         f'bcftools norm -m -any -f {fasta} -c s -Ou | '
         f'bcftools sort -Ov - | '
-            # Uppercase the allele strings with awk
-            "awk 'BEGIN{OFS=\"\t\"} /^#/ {print; next} {$4=toupper($4); $5=toupper($5); print}' | "
-            f'bgzip > {job.vcf_out["vcf.gz"]} && '
+        # Uppercase the allele strings with awk
+        'awk \'BEGIN{OFS="\t"} /^#/ {print; next} {$4=toupper($4); $5=toupper($5); print}\' | '
+        f'bgzip > {job.vcf_out["vcf.gz"]} && '
         f'tabix -p vcf {job.vcf_out["vcf.gz"]}'
     )
     return job

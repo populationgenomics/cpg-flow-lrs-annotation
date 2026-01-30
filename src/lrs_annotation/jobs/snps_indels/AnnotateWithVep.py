@@ -1,14 +1,14 @@
-
-import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from textwrap import dedent
 from typing import Literal
-from lrs_annotation.scripts.snps_indels import vep_json_to_ht
-from lrs_annotation.jobs.snps_indels.GatherVcfs import gather_vcfs
+
+import hailtop.batch as hb
 from cpg_flow.utils import can_reuse, dependency_handler
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, reference_path
+from hailtop.batch.job import Job
+
+from lrs_annotation.jobs.snps_indels.GatherVcfs import gather_vcfs
+from lrs_annotation.scripts.snps_indels import vep_json_to_ht
 
 
 def add_vep_jobs(

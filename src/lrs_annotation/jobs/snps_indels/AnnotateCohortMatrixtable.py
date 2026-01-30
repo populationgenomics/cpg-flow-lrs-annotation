@@ -1,11 +1,10 @@
-
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
 
 from lrs_annotation.scripts.snps_indels import vcf_to_annotate_cohort_mt
+
 
 def annotate_cohort_jobs_snps_indels(
     vcf_path: Path,

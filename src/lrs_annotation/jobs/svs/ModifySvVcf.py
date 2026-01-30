@@ -1,11 +1,10 @@
-
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
 
 from lrs_annotation.scripts.svs import sv_vcf_modifier
+
 
 def modify_sv_vcf(
     vcf_path: Path,
@@ -22,9 +21,7 @@ def modify_sv_vcf(
     vcf = get_batch().read_input(vcf_path)
     fasta = get_batch().read_input_group(**{'fa': ref_fa_path, 'fa.fai': f'{ref_fa_path}.fai'})['fa']
     sex_mapping = get_batch().read_input(sex_mapping_file_path)
-    j.declare_resource_group(
-        vcf_out={'vcf.gz': '{root}.vcf.gz'}
-    )
+    j.declare_resource_group(vcf_out={'vcf.gz': '{root}.vcf.gz'})
 
     j.image(config_retrieve(['workflow', 'driver_image']))
     j.storage('10Gi')
@@ -32,7 +29,7 @@ def modify_sv_vcf(
         f"""
         python3 {sv_vcf_modifier.__file__} \\
             --vcf_path {vcf} \\
-            --vcf_out {j.vcf_out["vcf.gz"]} \\
+            --vcf_out {j.vcf_out['vcf.gz']} \\
             --fa {fasta} \\
             --sex_mapping_file {sex_mapping}
         """

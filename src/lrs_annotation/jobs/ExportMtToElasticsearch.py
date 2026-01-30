@@ -4,6 +4,7 @@ from cpg_utils.hail_batch import Batch
 from lrs_annotation.scripts import mt_to_es
 from lrs_annotation.utils import get_resource_overrides_for_job
 
+
 def export_mt_to_elasticsearch(
     batch: Batch,
     mt_path: str,
