@@ -1,33 +1,33 @@
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
-from cpg_flow.utils import can_reuse
-from cpg_flow.resources import STANDARD, HIGHMEM
+from cpg_flow.resources import HIGHMEM, STANDARD
+from cpg_flow.utils import can_reuse, dependency_handler
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
+from hailtop.batch.job import Job
 
-from utils import get_intervals_from_bed, get_resource_overrides_for_job
+from lrs_annotation.utils import get_intervals_from_bed, get_resource_overrides_for_job
 
 from .PicardIntervals import get_intervals
+
 
 def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
     b: hb.Batch,
     scatter_count: int,
     merged_vcf_path: Path,
     tmp_bucket: Path,
+    job_attrs: dict[str, str],
     out_siteonly_vcf_part_paths: list[Path] | None = None,
     intervals_path: Path | None = None,
     exclude_intervals_path: Path | None = None,
-    job_attrs: dict | None = None,
 ) -> list[Job]:
     """
     Takes the merged VCF from the seqr_loader_long_read pipeline and prepares it
     for annotation with VEP by splitting it into parts and creating site-only VCFs.
     """
     jobs: list[Job] = []
-    intervals: list[str] | list[hb.ResourceFile] = []
+    intervals: list[str] | list[hb.ResourceFile]
+
     if intervals_path and intervals_path.suffix == '.bed':
         # If intervals_path is a bed file, read the intervals directly
         intervals_j = None
@@ -43,8 +43,8 @@ def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
             job_attrs=job_attrs,
             output_prefix=tmp_bucket / f'intervals_{scatter_count}',
         )
-    if intervals_j:
-        jobs.append(intervals_j)
+
+    dependency_handler(intervals_j, jobs)
 
     all_output_paths = []
     if out_siteonly_vcf_part_paths:
@@ -77,6 +77,10 @@ def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
             job_attrs=(job_attrs or {}) | {'part': 'all'},
         )
 
+    # if a job was created, add it to the list
+    dependency_handler(split_vcf_j, jobs)
+
+    scatter_jobs: list[Job] = []
     for idx in range(scatter_count):
         if out_siteonly_vcf_part_paths:
             siteonly_vcf_path = out_siteonly_vcf_part_paths[idx]
@@ -96,14 +100,15 @@ def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
         )
 
         siteonly_vcfs.append(siteonly_j_vcf)
-        if siteonly_j:
-            jobs.append(siteonly_j)
-            if split_vcf_j:
-                siteonly_j.depends_on(split_vcf_j)
 
-    jobs = [j for j in jobs if j is not None]
+        scatter_jobs.append(siteonly_j)
+
+    # for all real jobs created during the scatter, set a dependency on the job(s) prior to scattering
+    dependency_handler([j for j in scatter_jobs if j is not None], jobs)
+
     for j in jobs:
         j.name = f'Long Read SNPs Indels Annotation: {j.name}'
+
     return jobs
 
 
@@ -151,6 +156,7 @@ def add_split_vcf_job(
     j.command('wait && echo "All parts written"')
 
     return j
+
 
 def add_make_sitesonly_job(
     b: hb.Batch,

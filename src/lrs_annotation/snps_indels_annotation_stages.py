@@ -2,39 +2,31 @@
 Workflow for annotating long-read SNPs and Indels data into a seqr-ready format.
 """
 
-from loguru import logger
-
-from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve
-from cpg_utils.hail_batch import get_batch
-
 from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
-
+from cpg_utils import Path, to_path
+from cpg_utils.config import config_retrieve
+from cpg_utils.hail_batch import get_batch
+from google.api_core.exceptions import PermissionDenied
+from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
+from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
 from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
 from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
 from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
 from jobs.snps_indels.ModifyVcf import bcftools_reformat
 from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
-from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
-from inputs import (
-    get_sgs_from_datasets,
-    query_for_lrs_vcfs,
-    query_for_lrs_mappings
-)
-
+from loguru import logger
 from utils import (
+    es_password,
     get_dataset_names,
     get_family_sequencing_groups,
     get_query_filter_from_config,
-    write_mapping_to_file,
     joint_calling_scatter_count,
-    es_password,
+    write_mapping_to_file,
 )
 
-from google.api_core.exceptions import PermissionDenied
 
 @stage.stage
 class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
@@ -58,7 +50,7 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
             sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False)
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
 
@@ -73,6 +65,7 @@ class ModifyVcf(stage.SequencingGroupStage):
     """
     Modify the long-read SNPs Indels VCFs as a pre-processing step before merging.
     """
+
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'snps_indels' / 'reformatted_vcfs'
         return {
@@ -80,7 +73,7 @@ class ModifyVcf(stage.SequencingGroupStage):
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
         """
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
@@ -94,10 +87,11 @@ class ModifyVcf(stage.SequencingGroupStage):
             sg_ids.extend(sgs['sg_ids'])
             sg_vcfs.update(sgs['vcfs'])
 
-        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), \
-            ('SGs in the multicohort do not have VCFs matching the filter criteria: '
-             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
-             ' Adjust the query filter or the input cohorts')
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), (
+            'SGs in the multicohort do not have VCFs matching the filter criteria: '
+            f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
+            ' Adjust the query filter or the input cohorts'
+        )
 
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 
@@ -130,7 +124,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
             'index': self.tmp_prefix / 'snps_indels' / 'merged_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
@@ -138,9 +132,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
 
         # Get the reformatted VCFs from the previous stage
         reformatted_vcfs = inputs.as_dict_by_target(ModifyVcf)
-        reformatted_vcfs = {
-            sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']
-        }
+        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']}
 
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
@@ -177,12 +169,10 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
         """
         return {
             'siteonly': to_path(self.tmp_prefix / 'snps_indels' / 'siteonly.vcf.gz'),
-            'siteonly_part_pattern': str(
-                self.tmp_prefix / 'snps_indels' / 'siteonly_parts' / 'part{idx}.vcf.gz'
-            ),
+            'siteonly_part_pattern': str(self.tmp_prefix / 'snps_indels' / 'siteonly_parts' / 'part{idx}.vcf.gz'),
         }
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Submit jobs.
         """
@@ -233,7 +223,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         """
         return {'ht': self.tmp_prefix / 'snps_indels' / 'vep.ht'}
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Submit jobs.
         """
@@ -261,11 +251,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=[
-    ModifyVcf,
-    MergeVcfsWithBcftools,
-    VepLongReadAnnotation]
-)
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools, VepLongReadAnnotation])
 class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
     """
     First step to transform annotated SNPs Indels callset data into a seqr ready format
@@ -277,7 +263,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         """
         return {'mt': self.tmp_prefix / 'snps_indels' / 'cohort.mt'}
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
         """
         queue job(s) to rearrange the annotations prior to Seqr transformation
         """
@@ -302,11 +288,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage.stage(
-    required_stages=[AnnotateCohortMtFromVcfWithHail],
-    analysis_type='matrixtable',
-    analysis_keys=['mt']
-)
+@stage.stage(required_stages=[AnnotateCohortMtFromVcfWithHail], analysis_type='matrixtable', analysis_keys=['mt'])
 class SubsetMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the multicohort Matrixtable to a single dataset
@@ -326,7 +308,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             'mt': (dataset.prefix() / 'mt' / f'{mt_name}.mt'),
         }
 
-    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Subsets the whole MT to this cohort only
         Then brings a range of genotype data into row annotations
@@ -391,7 +373,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             'done_flag': dataset.prefix() / 'snps_indels' / 'es' / f'{index_name}.done',
         }
 
-    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Uses the non-DataProc MT-to-ES conversion script
         """
@@ -415,12 +397,10 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         outputs = self.expected_outputs(dataset)
 
         # get the absolute path to the MT
-        mt_path = str(
-            inputs.as_path(target=dataset, stage=SubsetMtToDatasetWithHail, key='mt')
-        )
+        mt_path = inputs.as_str(target=dataset, stage=SubsetMtToDatasetWithHail, key='mt')
 
         # get the expected outputs as Strings
-        index_name = str(outputs['index_name'])
+        index_name = outputs['index_name']
         flag_name = str(outputs['done_flag'])
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
@@ -440,4 +420,4 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
         )
 
-        return self.make_outputs(dataset, data=outputs['index_name'], jobs=job)
+        return self.make_outputs(dataset, data=outputs, jobs=job)

@@ -1,8 +1,10 @@
 import re
+
 from cpg_utils import Path, to_path
 from cpg_utils.config import ConfigError, reference_path
 
 PED_FAMILY_ID_REGEX = re.compile(r'(^[A-Za-z0-9_]+$)')
+
 
 def get_references(keys: list[str | dict[str, str]]) -> dict[str, str | list[str]]:
     """
@@ -25,6 +27,7 @@ def get_references(keys: list[str | dict[str, str]]) -> dict[str, str | list[str
             res[key] = reference_path(f'broad/{ref_d_key}')
 
     return res
+
 
 def clean_ped_family_ids(ped_line: str) -> str:
     """
