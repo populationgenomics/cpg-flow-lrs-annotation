@@ -1,14 +1,15 @@
 """
 Hail Query functions for seqr loader.
 """
+
 from argparse import ArgumentParser
-from loguru import logger
 
 import hail as hl
-
+from cpg_flow.utils import checkpoint_hail
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import genome_build, init_batch
-from cpg_flow.utils import checkpoint_hail
+from loguru import logger
+
 from lrs_annotation.hail_scripts.computed_fields import variant_id, vep
 from lrs_annotation.utils import get_init_batch_args_for_job
 
@@ -117,8 +118,7 @@ def annotate_cohort(
         mt = mt.annotate_rows(info=mt.info.drop('InbreedingCoeff'))
 
     logger.info(
-        'Annotating with seqr-loader fields: round 2 '
-        '(expanding sortedTranscriptConsequences, ref_data, clinvar_data)',
+        'Annotating with seqr-loader fields: round 2 (expanding sortedTranscriptConsequences, ref_data, clinvar_data)',
     )
     mt = mt.annotate_rows(
         domains=vep.get_expr_for_vep_protein_domains_set_from_sorted(mt.sortedTranscriptConsequences),
@@ -183,8 +183,12 @@ def cli_main():
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to the output Matrix Table file')
     parser.add_argument('--vep_ht_path', type=str, required=True, help='Path to the VEP Hail Table file')
     parser.add_argument('--checkpoint_prefix', type=str, default=None, help='Prefix for checkpoint files')
-    parser.add_argument('--remove_invalid_contigs', action='store_true', default=False,
-                        help='Whether to remove invalid contigs from the Matrix Table')
+    parser.add_argument(
+        '--remove_invalid_contigs',
+        action='store_true',
+        default=False,
+        help='Whether to remove invalid contigs from the Matrix Table',
+    )
 
     args = parser.parse_args()
 

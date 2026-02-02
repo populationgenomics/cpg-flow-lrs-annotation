@@ -1,7 +1,6 @@
 # Copied from https://github.com/broadinstitute/seqr-loading-pipelines/tree/master/hail_scripts/computed_fields
 import hail as hl
 
-
 # Consequence terms in order of severity (more severe to less severe) as estimated by Ensembl.
 # See https://ensembl.org/info/genome/variation/prediction/predicted_data.html
 CONSEQUENCE_TERMS = [

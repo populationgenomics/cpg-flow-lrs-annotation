@@ -1,19 +1,18 @@
 """
 Hail Query functions for seqr loader.
 """
-from argparse import ArgumentParser
-
-from loguru import logger
-
-import hail as hl
-from itertools import chain, islice
-from cpg_utils.config import config_retrieve, reference_path
-from cpg_utils.hail_batch import genome_build, init_batch
-from lrs_annotation.utils import get_init_batch_args_for_job
-
 
 import gzip
+from argparse import ArgumentParser
+from itertools import chain, islice
 from os.path import join
+
+import hail as hl
+from cpg_utils.config import config_retrieve, reference_path
+from cpg_utils.hail_batch import genome_build, init_batch
+from loguru import logger
+
+from lrs_annotation.utils import get_init_batch_args_for_job
 
 # I'm just going to go ahead and steal these constants from their seqr loader
 BOTHSIDES_SUPPORT = 'BOTHSIDES_SUPPORT'

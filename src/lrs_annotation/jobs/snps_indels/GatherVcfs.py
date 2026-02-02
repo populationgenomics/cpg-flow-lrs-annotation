@@ -1,12 +1,10 @@
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
-from cpg_flow.utils import can_reuse
 from cpg_flow.resources import STANDARD, storage_for_joint_vcf
+from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
+from hailtop.batch.job import Job
 
 
 def gather_vcfs(
@@ -53,7 +51,7 @@ def gather_vcfs(
         j.image(config_retrieve(['images', 'bcftools']))
         res = STANDARD.set_resources(j, storage_gb=storage_for_joint_vcf(sequencing_group_count, site_only))
         cmd = f"""
-        bcftools concat --threads {res.get_nthreads() -1 } -a {" ".join(vcf["vcf.gz"] for vcf in vcfs_in_batch)} \
+        bcftools concat --threads {res.get_nthreads() - 1} -a {' '.join(vcf['vcf.gz'] for vcf in vcfs_in_batch)} \
         -Oz -o {j.output_vcf}
         """
         j.command(command(cmd, monitor_space=True))
