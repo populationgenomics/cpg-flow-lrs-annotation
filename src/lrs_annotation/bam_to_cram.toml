@@ -11,7 +11,7 @@ analysis_type = 'cram'
 # storage_gib = 50
 
 [images]
-somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.2.15"
+somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
 
 [references]
 somalier_sites = "gs://cpg-common-main/references/somalier/sites.hg38.vcf.gz"
