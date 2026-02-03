@@ -1,9 +1,11 @@
-import hail as hl
 from argparse import ArgumentParser
 
-from loguru import logger
+import hail as hl
 from cpg_utils.hail_batch import init_batch
+from loguru import logger
+
 from lrs_annotation.utils import get_init_batch_args_for_job
+
 
 def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
     """
@@ -25,7 +27,7 @@ def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
     if sg_ids_not_in_mt := unique_sg_ids - mt_sg_ids:
         raise ValueError(
             f'Found {len(sg_ids_not_in_mt)}/{len(unique_sg_ids)} IDs in the requested subset not in the callset.\n'
-            f'IDs that aren\'t in the callset: {sg_ids_not_in_mt}\n'
+            f"IDs that aren't in the callset: {sg_ids_not_in_mt}\n"
             f'All callset SG IDs: {mt_sg_ids}',
         )
 
@@ -35,6 +37,7 @@ def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
     mt.write(out_mt_path, overwrite=True)
     logger.info(f'Finished subsetting to {len(unique_sg_ids)} samples, written to {out_mt_path}.')
+
 
 def cli_main():
     """

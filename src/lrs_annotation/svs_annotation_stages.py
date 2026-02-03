@@ -2,42 +2,31 @@
 Workflow for annotating long-read SVs data into a seqr-ready format.
 """
 
-from loguru import logger
-
-from cpg_utils import Path, to_path
-from cpg_utils.config import AR_GUID_NAME, config_retrieve, try_get_ar_guid
-from cpg_utils.hail_batch import get_batch
-
 from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
-
-from jobs.svs.ModifySvVcf import modify_sv_vcf
+from cpg_utils import Path, to_path
+from cpg_utils.config import AR_GUID_NAME, config_retrieve, try_get_ar_guid
+from cpg_utils.hail_batch import get_batch
+from google.api_core.exceptions import PermissionDenied
+from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
+from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from jobs.svs.AnnotateCohortMatrixtable import annotate_cohort_jobs_svs
 from jobs.svs.AnnotateDatasetMatrixtable import annotate_dataset_jobs_sv
 from jobs.svs.AnnotateVcfGatk import queue_annotate_sv_jobs
 from jobs.svs.AnnotateVcfSTRVCTVRE import annotate_strvctvre_job
 from jobs.svs.MergeVcfs import merge_svs_vcf_with_bcftools
+from jobs.svs.ModifySvVcf import modify_sv_vcf
 from jobs.svs.ReformatVcfs import reformat_svs_vcf_with_bcftools
 from jobs.svs.WriteCleanedPedFile import make_clean_combined_ped
-
-from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
-
-from inputs import (
-    get_sgs_from_datasets,
-    query_for_lrs_vcfs,
-    query_for_lrs_mappings
-)
-
+from loguru import logger
 from utils import (
+    es_password,
     get_dataset_name,
     get_dataset_names,
     get_query_filter_from_config,
     write_mapping_to_file,
-    es_password,
 )
-
-from google.api_core.exceptions import PermissionDenied
 
 
 @stage.stage
@@ -65,7 +54,7 @@ class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
             sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False)
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
         lrs_sex_mapping = {lrs_id: mapping['sex'] for lrs_id, mapping in lrs_mapping.items()}
@@ -76,6 +65,7 @@ class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
         write_mapping_to_file(lrs_sex_mapping, sex_mapping_file_path)
 
         return self.make_outputs(multicohort, data=self.expected_outputs(multicohort))
+
 
 @stage.stage
 class WriteCleanedPedFile(stage.MultiCohortStage):
@@ -104,6 +94,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
     Modify the long-read SV VCFs, saving them to temp storage for use in the next stage.
     - This is explicitly skipped for the parents in trio joint-called VCFs
     """
+
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' / 'modified_vcfs'
         return {
@@ -126,10 +117,11 @@ class ModifySVsVcf(stage.SequencingGroupStage):
             sg_ids.extend(sgs['sg_ids'])
             sg_vcfs.update(sgs['vcfs'])
 
-        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), \
-            ('SGs in the multicohort do not have VCFs matching the filter criteria: '
-             f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
-             ' Adjust the query filter or the input cohorts')
+        assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), (
+            'SGs in the multicohort do not have VCFs matching the filter criteria: '
+            f'{set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids)}'
+            ' Adjust the query filter or the input cohorts'
+        )
 
         if sg.id not in sg_vcfs:
             return None
@@ -145,7 +137,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
             ref_fa_path=config_retrieve(['workflow', 'ref_fasta']),
             sex_mapping_file_path=lrs_id_sex_map,
             job_name=job_name,
-            job_attrs={'tool': 'python'}
+            job_attrs={'tool': 'python'},
         )
 
         # write from temp storage into GCP
@@ -160,8 +152,9 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
     """
     Reformat the modified long-read SV VCFs using BCFtools
     """
+
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' /  'reformatted_vcfs'
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' / 'reformatted_vcfs'
         return {
             'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz',
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz.tbi',
@@ -200,6 +193,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
     """
     Merge the reformatted SVs VCFs together with bcftools
     """
+
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
             'vcf': self.tmp_prefix / 'svs' / 'merged_reformatted.vcf.gz',
@@ -213,9 +207,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
         sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
         # Get the reformatted VCFs from the previous stage
         reformatted_vcfs = inputs.as_dict_by_target(ReformatSVsVcfWithBcftools)
-        reformatted_vcfs = {
-            sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']
-        }
+        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']}
 
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
@@ -227,11 +219,7 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
             if sgid in reformatted_vcfs
         ]
 
-        merge_job = merge_svs_vcf_with_bcftools(
-            batch=get_batch(),
-            vcf_paths=vcf_paths,
-            job_attrs={'tool': 'bcftools'}
-        )
+        merge_job = merge_svs_vcf_with_bcftools(batch=get_batch(), vcf_paths=vcf_paths, job_attrs={'tool': 'bcftools'})
 
         outputs = self.expected_outputs(multicohort)
         get_batch().write_output(merge_job.output, str(outputs['vcf']).removesuffix('.vcf.gz'))
@@ -239,15 +227,12 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[
-    WriteCleanedPedFile,
-    ModifySVsVcf,
-    ReformatSVsVcfWithBcftools,
-    MergeSVsVcfsWithBcftools])
+@stage.stage(required_stages=[WriteCleanedPedFile, ModifySVsVcf, ReformatSVsVcfWithBcftools, MergeSVsVcfsWithBcftools])
 class AnnotateSVsWithGatk(stage.MultiCohortStage):
     """
     Annotates the merged long-read SVs VCF with GATK-SV.
     """
+
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
             'annotated_vcf': self.tmp_prefix / 'svs' / 'gatk_annotated.vcf.gz',
@@ -284,6 +269,7 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
     """
     Annotate the long-read SVs VCF with STRVCTVRE.
     """
+
     def expected_outputs(self, multicohort: targets.MultiCohort) -> dict[str, Path]:
         return {
             'strvctvre_vcf': self.tmp_prefix / 'svs' / 'strvctvre_annotated.vcf.gz',
@@ -307,7 +293,7 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
             job_attrs=self.get_job_attrs(),
         )
 
-        return self.make_outputs(multicohort, jobs=strvctvre_job,  data=outputs)
+        return self.make_outputs(multicohort, jobs=strvctvre_job, data=outputs)
 
 
 @stage.stage(required_stages=AnnotateSVsWithStrvctvre)
@@ -389,7 +375,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
 @stage.stage(
     required_stages=[SubsetSVsMtToDatasetWithHail],
     analysis_type='es-index',
-    analysis_keys=['index_name'],
+    analysis_keys=['done_flag'],
     update_analysis_meta=lambda x: {'seqr-dataset-type': 'SV'},  # noqa: ARG005
 )
 class ExportSVsMtToElasticIndex(stage.DatasetStage):
@@ -434,9 +420,7 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         outputs = self.expected_outputs(dataset)
 
         # get the absolute path to the MT
-        mt_path = str(
-            inputs.as_path(target=dataset, stage=SubsetSVsMtToDatasetWithHail, key='mt')
-        )
+        mt_path = str(inputs.as_path(target=dataset, stage=SubsetSVsMtToDatasetWithHail, key='mt'))
 
         # get the expected outputs as Strings
         index_name = str(outputs['index_name'])
@@ -459,4 +443,4 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
         )
 
-        return self.make_outputs(dataset, data=outputs['index_name'], jobs=job)
+        return self.make_outputs(dataset, data=outputs, jobs=job)

@@ -1,10 +1,9 @@
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import command
+from hailtop.batch.job import Job
+
 
 def get_intervals(
     b: hb.Batch,

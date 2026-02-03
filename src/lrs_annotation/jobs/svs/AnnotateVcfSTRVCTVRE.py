@@ -1,9 +1,9 @@
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, image_path
 from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
+
 from lrs_annotation.utils import get_references
 
 

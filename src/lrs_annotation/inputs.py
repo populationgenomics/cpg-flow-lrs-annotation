@@ -1,14 +1,12 @@
 """
 Methods for querying Metamist for long-read sequencing VCFs and related metadata.
 """
+
 from functools import cache
 
-from loguru import logger
-
 from cpg_utils.config import config_retrieve
-
+from loguru import logger
 from metamist.graphql import gql, query
-
 from utils import get_dataset_name
 
 VCF_QUERY = gql(
@@ -42,7 +40,7 @@ LRS_IDS_QUERY = gql(
       sequencingGroups(technology: {eq: "long-read"}, type: {in_: $seqTypes}, platform: {in_: $platforms}) {
           id
           sample {
-            externalId
+            externalIds
             meta
             participant {
               externalId
@@ -72,7 +70,7 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
         if vcf_analysis['meta'].get('joint_called', False):
             if not vcf_analysis['meta'].get('family_id'):
                 logger.warning(
-                    f"Joint-called VCF {vcf_analysis['output']} does not have a family ID, skipping.",
+                    f'Joint-called VCF {vcf_analysis["output"]} does not have a family ID, skipping.',
                 )
                 continue
             # Add the family ID to the set of joint-called families
@@ -86,23 +84,17 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
         # Parents are identified by their participant ID ending with '01' or '02'
         # OR some other specified pattern, e.g. 'P', 'M'
         parental_id_suffixes = tuple(
-            config_retrieve(
-                ['workflow', 'query_filters', 'parental_id_suffixes'],
-                default=['01', '02']
-            )
+            config_retrieve(['workflow', 'query_filters', 'parental_id_suffixes'], default=['01', '02'])
         )
-        if (
-            analysis_meta.get('family_id', '') in joint_called_families
-            and analysis_meta.get('participant_id', '').endswith(parental_id_suffixes)
-        ):
+        if analysis_meta.get('family_id', '') in joint_called_families and analysis_meta.get(
+            'participant_id', ''
+        ).endswith(parental_id_suffixes):
             sgs_to_skip.add(sg_id)
     return sgs_to_skip
 
 
 @cache
-def query_for_lrs_vcfs(
-    dataset_name: str
-) -> dict[str, dict | list[str]]:
+def query_for_lrs_vcfs(dataset_name: str) -> dict[str, dict | list[str]]:
     """
     Query metamist for the long-read sequencing VCFs. The VCFs are filtered by the values specified in
     the workflow.query_filters config dictionary, using the analysis.meta field.
@@ -205,7 +197,7 @@ def query_for_lrs_vcfs(
             'seqTypes': sequencing_types,
             'platforms': sequencing_platforms,
             'analysisType': analysis_types,
-            'metaFilter': meta_filter
+            'metaFilter': meta_filter,
         },
     )
     for sg in joint_called_vcfs_query_results['project']['sequencingGroups']:
@@ -249,7 +241,7 @@ def query_for_lrs_mappings(
     dataset_names: list[str],
     sequencing_types: list[str],
     sequencing_platforms: list[str],
-    ) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, str]]:
     """
     Query metamist for the LRS ID to SG ID mapping, and it's associated participant's sex
     """
@@ -257,19 +249,47 @@ def query_for_lrs_mappings(
     for dataset in dataset_names:
         query_results = query(
             LRS_IDS_QUERY,
-            variables={'dataset': dataset, 'seqTypes': sequencing_types, 'platforms': sequencing_platforms}
+            variables={'dataset': dataset, 'seqTypes': sequencing_types, 'platforms': sequencing_platforms},
         )
         for sg in query_results['project']['sequencingGroups']:
             sample = sg['sample']
             participant = sample['participant']
-            lrs_id = sample['meta'].get('lrs_id', None)
+            lrs_id = get_lrs_id_from_sample(sample, sequencing_types, sequencing_platforms)
             if not lrs_id:
                 logger.warning(
-                    f'{dataset} :: No LRS ID found for {participant["externalId"]} - {sample["externalId"]}',
+                    f'{dataset} :: No LRS ID found for {participant["externalId"]} - {sample["externalIds"][""]}',
                 )
                 continue
             lrs_mappings[lrs_id] = {'sg_id': sg['id'], 'sex': participant['reportedSex']}
     return lrs_mappings
+
+
+def get_lrs_id_from_sample(
+    sample: dict[str, dict[str, str]],
+    sequencing_types: list[str],
+    sequencing_platforms: list[str],
+) -> str | None:
+    """
+    Get the LRS ID from the sample's external IDs or meta field.
+
+    Mainly used for handling samples with multiple LRS IDs
+    across different sequencing types/platforms.
+
+    The LRS ID is expected to be in the sample's external IDs
+    keyed by the sequencing platform and sequencing type, e.g.
+     - 'oxford-nanopore_genome_lrs_id'
+     - 'pacbio_genome_lrs_id'
+    """
+    ext_ids: dict[str, str] = sample['externalIds']
+    # Only expect one sequencing type/platform per workflow run here
+    seq_string = f'{sequencing_platforms[0]}_{sequencing_types[0]}_lrs_id'
+    if seq_string in ext_ids:
+        return ext_ids[seq_string]
+    # Fallback to generic lrs_id key
+    if 'lrs_id' in ext_ids:
+        return ext_ids['lrs_id']
+    # Final fallback to sample's meta field
+    return sample['meta'].get('lrs_id', None)
 
 
 def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str] | dict]:
@@ -282,7 +302,4 @@ def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str
     for dataset in multicohort_datasets:
         sg_ids.extend(query_for_lrs_vcfs(get_dataset_name(dataset))['sg_ids'])
         vcfs.update(query_for_lrs_vcfs(get_dataset_name(dataset))['vcfs'])  # type: ignore[arg-type]
-    return {
-        'sg_ids': sg_ids,
-        'vcfs': vcfs
-    }
+    return {'sg_ids': sg_ids, 'vcfs': vcfs}

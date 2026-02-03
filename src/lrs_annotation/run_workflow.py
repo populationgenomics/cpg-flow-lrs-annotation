@@ -31,7 +31,7 @@ def cli_main():
     else:
         raise ValueError(f'Unknown workflow: {args.workflow}')
 
-    run_workflow(name='lrs_annotation',stages=stages, dry_run=args.dry_run)
+    run_workflow(name='lrs_annotation', stages=stages, dry_run=args.dry_run)
 
 
 if __name__ == '__main__':

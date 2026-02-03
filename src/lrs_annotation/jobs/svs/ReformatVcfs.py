@@ -3,6 +3,7 @@ from cpg_utils.hail_batch import Batch
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 
+
 def reformat_svs_vcf_with_bcftools(
     batch: Batch,
     job_name: str,
@@ -28,14 +29,12 @@ def reformat_svs_vcf_with_bcftools(
     # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
     reformatting_job = batch.new_job(job_name, job_attrs)
     reformatting_job.image(image=config_retrieve(['images', 'bcftools']))
-    reformatting_job.declare_resource_group(
-        vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
-    )
+    reformatting_job.declare_resource_group(vcf_out={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'})
 
     reformatting_job = get_resource_overrides_for_job(reformatting_job, 'reformat_svs_vcf')
 
     # First, validate that sample ID(s) from the input VCF exist in the reheadering / mapping file
-    reformatting_job.command(f'''
+    reformatting_job.command(f"""
         # Extract sample IDs from VCF
         SAMPLE_IDS=$(bcftools query -l {local_vcf})
 
@@ -50,7 +49,7 @@ def reformat_svs_vcf_with_bcftools(
         done
 
         echo "All sample IDs validated successfully"
-    ''')  # noqa: Q001
+    """)
 
     reformatting_job.command(
         f'bcftools view {local_vcf} -Ou | '

@@ -20,10 +20,14 @@ which causes some issues with parsing, e.g. frequencies:
 The key here is that we are aware of the fields that can/will fail, and
 avoid relying on them downstream
 """
+
 from argparse import ArgumentParser
+
 import hail as hl
 from cpg_utils.hail_batch import init_batch
+
 from lrs_annotation.utils import get_init_batch_args_for_job
+
 
 def vep_json_to_ht(vep_results_paths: list[str], out_path):
     """
@@ -201,17 +205,12 @@ def cli_main():
     """
 
     parser = ArgumentParser()
-    parser.add_argument('--vep_results_paths', type=str, nargs='+',
-                        help='Paths to VEP result files in JSON format')
-    parser.add_argument('--out_path', type=str, required=True,
-                        help='Output path for the Hail Table')
+    parser.add_argument('--vep_results_paths', type=str, nargs='+', help='Paths to VEP result files in JSON format')
+    parser.add_argument('--out_path', type=str, required=True, help='Output path for the Hail Table')
 
     args = parser.parse_args()
 
-    vep_json_to_ht(
-        vep_results_paths=args.vep_results_paths,
-        out_path=args.out_path
-    )
+    vep_json_to_ht(vep_results_paths=args.vep_results_paths, out_path=args.out_path)
 
 
 if __name__ == '__main__':

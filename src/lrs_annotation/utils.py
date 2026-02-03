@@ -1,24 +1,22 @@
 """
 Utility methods used across the workflows
 """
+
 import hashlib
-from hailtop.batch.job import BashJob
 from enum import Enum
-from cpg_flow import targets
-from cpg_flow.utils import logger
-from cpg_utils import Path
-from cpg_utils.cloud import read_secret
-from cpg_utils.config import ConfigError, config_retrieve, reference_path, image_path
+from functools import cache
 from os.path import join
 from random import randint
 from typing import Any
 
-from functools import cache
-
-from hailtop.batch.job import Job
-
+from cpg_flow import targets
+from cpg_flow.utils import logger
+from cpg_utils import Path
+from cpg_utils.cloud import read_secret
+from cpg_utils.config import ConfigError, config_retrieve, image_path, reference_path
 from cpg_utils.cromwell import CromwellOutputType, run_cromwell_workflow_from_repo_and_get_outputs
 from cpg_utils.hail_batch import command, get_batch
+from hailtop.batch.job import BashJob, Job
 
 GATK_SV_COMMIT = config_retrieve(['workflow', 'gatk_sv_commit'])
 
@@ -48,14 +46,14 @@ def get_dataset_names(datasets: str | list[str]) -> list[str]:
     return [get_dataset_name(dataset) for dataset in datasets]
 
 
-def get_query_filter_from_config(field_name: str, make_tuple = True) -> tuple[str] | list[str] | None:
+def get_query_filter_from_config(field_name: str, make_tuple=True) -> tuple[str] | list[str] | None:
     """
     Get values for the specified field from the workflow.lrs_annotation config dictionary.
 
     Returns tuples by default, because they are needed for use with cached functions.
     """
     if values := config_retrieve(
-        ['workflow', 'query_filter', field_name],
+        ['workflow', 'query_filters', field_name],
         default=None,
     ):
         if isinstance(values, str):
@@ -108,6 +106,7 @@ def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
      e.g. {'storage_gib': 10, 'cpu_cores': 4}
     If no overrides are found, the job is returned unchanged.
     """
+
     def convert_to_gib(value: str | int) -> str:
         """
         Convert a value to a string with 'Gi' suffix for Gibibytes, or 2^30 bytes.
@@ -175,7 +174,7 @@ def get_intervals_from_bed(intervals_path: Path) -> list[str]:
         intervals = []
         for line in f:
             chrom, start, end = line.strip().split('\t')
-            intervals.append(f'{chrom}:{int(start)+1}-{end}')
+            intervals.append(f'{chrom}:{int(start) + 1}-{end}')
     return intervals
 
 
@@ -225,6 +224,7 @@ def es_password() -> str:
         fail_gracefully=False,
     )
 
+
 def make_job_name(
     name: str,
     sequencing_group: str | None = None,
@@ -268,6 +268,7 @@ def get_references(keys: list[str | dict[str, str]]) -> dict[str, str | list[str
 
     return res
 
+
 def get_images(keys: list[str], allow_missing=False) -> dict[str, str]:
     """
     Dict of WDL inputs with docker image paths.
@@ -288,6 +289,7 @@ def get_images(keys: list[str], allow_missing=False) -> dict[str, str]:
             raise KeyError(f'Unknown image keys: {query_keys - image_keys}')
 
     return {k: image_path(k) for k in image_keys if k in keys}
+
 
 @cache
 def create_polling_intervals() -> dict:
