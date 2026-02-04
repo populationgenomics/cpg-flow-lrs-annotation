@@ -33,8 +33,9 @@ def extract_somalier(
         crai=f'{cram_path}.crai',
     ).cram
 
+    sg_id_prefix = sg_id + '_'
     job.command(f"""
-    somalier extract -d extracted/ --sites {sites} -f {ref.base} --sample-prefix {sg_id} {cram_localised}
+    somalier extract -d extracted/ --sites {sites} -f {ref.base} --sample-prefix {sg_id_prefix} {cram_localised}
     mv extracted/*.somalier {job.output_file}
     """)
     batch_instance.write_output(job.output_file, output)
