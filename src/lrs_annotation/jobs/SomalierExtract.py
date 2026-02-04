@@ -7,6 +7,7 @@ from hailtop.batch.job import Job
 
 
 def extract_somalier(
+    sg_id: str,
     cram_path: str,
     output: Path,
     job_attrs: dict,
@@ -33,7 +34,7 @@ def extract_somalier(
     ).cram
 
     job.command(f"""
-    somalier extract -d extracted/ --sites {sites} -f {ref.base} {cram_localised}
+    somalier extract -d extracted/ --sites {sites} -f {ref.base} --sample-prefix {sg_id} {cram_localised}
     mv extracted/*.somalier {job.output_file}
     """)
     batch_instance.write_output(job.output_file, output)

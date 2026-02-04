@@ -67,6 +67,7 @@ class CramQcSomalier(stage.SequencingGroupStage):
         cram = inputs.as_str(sequencing_group, ConvertBamToCram, 'cram')
 
         jobs = extract_somalier(
+            sg_id=sequencing_group.id,
             cram_path=cram,
             output=output,
             job_attrs=self.get_job_attrs(sequencing_group),
