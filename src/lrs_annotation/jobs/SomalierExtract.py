@@ -7,16 +7,15 @@ from hailtop.batch.job import Job
 
 
 def extract_somalier(
-    sg_id: str,
     cram_path: str,
     output: Path,
-    job_attrs: dict,
+    job_attrs: dict[str, str],
 ) -> Job:
     """Run `somalier extract` to generate a fingerprint (i.e. a `*.somalier` file)."""
 
     batch_instance = hail_batch.get_batch()
 
-    job = batch_instance.new_job('Somalier extract', attributes=job_attrs | {'tool': 'somalier'})
+    job = batch_instance.new_job('Somalier extract', job_attrs | {'tool': 'somalier'})
 
     job.image(config.config_retrieve(['images', 'somalier']))
     storage_gb = config.config_retrieve(['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'], 50)
@@ -33,9 +32,8 @@ def extract_somalier(
         crai=f'{cram_path}.crai',
     ).cram
 
-    sg_id_prefix = sg_id + '_'
     job.command(f"""
-    somalier extract -d extracted/ --sites {sites} -f {ref.base} --sample-prefix {sg_id_prefix} {cram_localised}
+    somalier extract -d extracted/ --sites {sites} -f {ref.base} {cram_localised}
     mv extracted/*.somalier {job.output_file}
     """)
     batch_instance.write_output(job.output_file, output)
