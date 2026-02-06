@@ -8,6 +8,7 @@ from cpg_utils import Path
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import get_batch
 from jobs.BamToCram import bam_to_cram
+from jobs.SomalierExtract import extract_somalier
 
 
 def make_long_read_cram_path(sg: targets.SequencingGroup) -> CramPath:
@@ -51,3 +52,24 @@ class ConvertBamToCram(stage.SequencingGroupStage):
         get_batch().write_output(job.sorted_cram, str(self.expected_outputs(sg)['cram']).removesuffix('.cram'))
 
         return self.make_outputs(sg, data=self.expected_outputs(sg), jobs=[job])
+
+
+@stage.stage(required_stages=[ConvertBamToCram])
+class CramQcSomalier(stage.SequencingGroupStage):
+    """Run somalier extract on a CRAM file."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
+        return make_long_read_cram_path(sequencing_group).somalier_path
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        output = self.expected_outputs(sequencing_group)
+
+        cram = inputs.as_str(sequencing_group, ConvertBamToCram, 'cram')
+
+        jobs = extract_somalier(
+            cram_path=cram,
+            output=output,
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+
+        return self.make_outputs(sequencing_group, data=output, jobs=jobs)
