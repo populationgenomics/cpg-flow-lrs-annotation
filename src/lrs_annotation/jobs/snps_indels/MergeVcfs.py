@@ -1,17 +1,18 @@
+from cpg_utils import hail_batch
 from cpg_utils.config import config_retrieve
-from cpg_utils.hail_batch import Batch
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 
 
 def merge_snps_indels_vcf_with_bcftools(
-    batch: Batch,
-    vcf_paths: str,
+    vcf_paths: list[str],
     job_attrs: dict | None = None,
 ):
     """
     Naively merge SNPs and Indels VCFs using bcftools.
     """
+    batch = hail_batch.get_batch()
+
     # Input files
     batch_vcfs = [
         batch.read_input_group(**{'vcf.gz': each_vcf, 'vcf.gz.tbi': f'{each_vcf}.tbi'})['vcf.gz']

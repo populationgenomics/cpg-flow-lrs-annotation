@@ -125,7 +125,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
             'index': self.tmp_prefix / 'snps_indels' / 'merged_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput:
+    def queue_jobs(self, multicohort: targets.MultiCohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
@@ -146,7 +146,6 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         ]
 
         merge_job = merge_snps_indels_vcf_with_bcftools(
-            batch=get_batch(),
             vcf_paths=vcf_paths,
             job_attrs={'tool': 'bcftools'},
         )
@@ -178,7 +177,10 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
         """
         Queue job(s) to convert the merged VCF to a matrixtable without annotation
         """
-        assert len(get_multicohort().get_datasets()) == 1, 'Expected only one dataset in the multicohort for this stage'
+        mc = get_multicohort()
+
+        # current VCF merging implementation is multicohort, so multiple datasets would require subsettting
+        assert len(mc.get_datasets()) == 1, 'Expected only one dataset in the multicohort for this stage'
 
         # only create matrixtables for datasets specified in the config
         # or, if this config option is not set, run for all datasets
@@ -187,7 +189,12 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
             logger.info(f'Skipping unannotated MT writing for {dataset}')
             return self.make_outputs(dataset)
 
-        vcf_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
+        if len(inputs.as_dict_by_target(ModifyVcf)) == 1:
+            sg = mc.get_sequencing_groups()[0]
+            vcf_path = inputs.as_path(sg, ModifyVcf, 'vcf')
+        else:
+            vcf_path = inputs.as_path(mc, MergeVcfsWithBcftools, 'vcf')
+
         outputs = self.expected_outputs(dataset)
 
         job = vcf_to_unannotated_mt_job(
