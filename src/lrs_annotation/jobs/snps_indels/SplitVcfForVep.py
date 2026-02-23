@@ -11,7 +11,7 @@ from lrs_annotation.utils import get_intervals_from_bed, get_resource_overrides_
 from .PicardIntervals import get_intervals
 
 
-def split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
+def split_vcf_for_vep(
     b: hb.Batch,
     scatter_count: int,
     merged_vcf_path: Path,

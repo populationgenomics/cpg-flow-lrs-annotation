@@ -10,16 +10,19 @@ from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 from google.api_core.exceptions import PermissionDenied
 from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
-from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
-from jobs.snps_indels.AnnotateCohortMatrixtable import annotate_cohort_jobs_snps_indels
-from jobs.snps_indels.AnnotateDatasetMatrixtable import annotate_dataset_jobs
-from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
-from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
-from jobs.snps_indels.ModifyVcf import bcftools_reformat
-from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
-from jobs.snps_indels.VcfToUnannotatedMt import vcf_to_unannotated_mt_job
 from loguru import logger
-from utils import (
+
+from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
+from lrs_annotation.jobs.snps_indels import (
+    AnnotateCohortMatrixtable,
+    AnnotateDatasetMatrixtable,
+    AnnotateWithVep,
+    MergeVcfs,
+    ModifyVcfJobs,
+    SplitVcfForVep,
+    VcfToUnannotatedMt,
+)
+from lrs_annotation.utils import (
     es_password,
     get_dataset_names,
     get_family_sequencing_groups,
@@ -100,7 +103,7 @@ class ModifyVcf(stage.SequencingGroupStage):
         vcf_path: str = sg_vcfs[sg.id]['vcf']
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgIdMappingFile, 'lrs_sg_id_mapping')
 
-        reformatting_job = bcftools_reformat(
+        reformatting_job = ModifyVcfJobs.bcftools_reformat(
             vcf_path=vcf_path,
             job_name=f'Reformat SNPs Indels VCF for {sg.id}: {"joint-called " if joint_called else ""}{vcf_path}',
             job_attrs={'tool': 'bcftools'},
@@ -145,7 +148,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
             if sg_id in reformatted_vcfs
         ]
 
-        merge_job = merge_snps_indels_vcf_with_bcftools(
+        merge_job = MergeVcfs.merge_snps_indels_vcf_with_bcftools(
             vcf_paths=vcf_paths,
             job_attrs={'tool': 'bcftools'},
         )
@@ -197,7 +200,7 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
 
         outputs = self.expected_outputs(dataset)
 
-        job = vcf_to_unannotated_mt_job(
+        job = VcfToUnannotatedMt.vcf_to_unannotated_mt_job(
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
             job_attrs=self.get_job_attrs(dataset),
@@ -247,7 +250,7 @@ class SplitVcfIntoSitesOnlyWithGatk(stage.MultiCohortStage):
         else:
             merged_vcf_path = inputs.as_path(multicohort, MergeVcfsWithBcftools, 'vcf')
 
-        vcf_jobs = split_merged_vcf_and_get_sitesonly_vcfs_for_vep(
+        vcf_jobs = SplitVcfForVep.split_vcf_for_vep(
             b=get_batch(),
             scatter_count=scatter_count,
             merged_vcf_path=merged_vcf_path,
@@ -290,7 +293,7 @@ class VepLongReadAnnotation(stage.MultiCohortStage):
             for idx in range(scatter_count)
         ]
 
-        jobs = add_vep_jobs(
+        jobs = AnnotateWithVep.add_vep_jobs(
             get_batch(),
             input_vcfs=input_siteonly_vcf_part_paths,
             out_path=outputs['ht'],
@@ -327,7 +330,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
 
         vep_ht_path = inputs.as_path(target=multicohort, stage=VepLongReadAnnotation, key='ht')
 
-        job = annotate_cohort_jobs_snps_indels(
+        job = AnnotateCohortMatrixtable.annotate_cohort_jobs_snps_indels(
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
             vep_ht_path=vep_ht_path,
@@ -386,7 +389,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         sg_hash = workflow.get_workflow().output_version
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
 
-        jobs = annotate_dataset_jobs(
+        jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
