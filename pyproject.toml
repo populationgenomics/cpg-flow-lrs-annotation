@@ -53,19 +53,6 @@ include_package_data = true
 [options.package_data]
 'lrs_annotation'=  ['lrs_annotation.toml']
 
-[tool.black]
-line-length = 120
-skip-string-normalization = true
-exclude = '''
-/(
-  venv
-  | \.mypy_cache
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
 [tool.mypy]
 ignore_missing_imports = true
 
