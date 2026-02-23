@@ -17,6 +17,7 @@ from jobs.snps_indels.AnnotateWithVep import add_vep_jobs
 from jobs.snps_indels.MergeVcfs import merge_snps_indels_vcf_with_bcftools
 from jobs.snps_indels.ModifyVcf import bcftools_reformat
 from jobs.snps_indels.SplitMergedVcfAndGetSitesOnlyForVep import split_merged_vcf_and_get_sitesonly_vcfs_for_vep
+from jobs.snps_indels.VcfToUnannotatedMt import vcf_to_unannotated_mt_job
 from loguru import logger
 from utils import (
     es_password,
@@ -154,6 +155,48 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         get_batch().write_output(merge_job.output, str(outputs['vcf']).removesuffix('.vcf.gz'))
 
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
+
+
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
+class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
+    """
+    Writes the merged VCF to a matrix table at the dataset level, without any annotation.
+
+    This optional step is for exporting the merged VCFs to dataset level matrixtables
+    to be used as inputs to the Talos workflow, which handles annotation separately.
+    """
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        """
+        Expected to write a matrix table.
+        """
+        sg_hash = workflow.get_workflow().output_version
+        mt_name = f'LongReadSNPsIndels-{sg_hash}-{dataset.name}'
+        return {'mt': dataset.prefix() / 'unannotated' / 'snps_indels' / f'{mt_name}.mt'}
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
+        """
+        Queue job(s) to convert the merged VCF to a matrixtable without annotation
+        """
+        assert len(get_multicohort().get_datasets()) == 1, 'Expected only one dataset in the multicohort for this stage'
+
+        # only create matrixtables for datasets specified in the config
+        # or, if this config option is not set, run for all datasets
+        eligible_datasets = config_retrieve(['workflow', 'write_unannotated_mt_for_datasets'], default=None)
+        if eligible_datasets is not None and dataset.name not in eligible_datasets:
+            logger.info(f'Skipping unannotated MT writing for {dataset}')
+            return self.make_outputs(dataset)
+
+        vcf_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
+        outputs = self.expected_outputs(dataset)
+
+        job = vcf_to_unannotated_mt_job(
+            vcf_path=vcf_path,
+            out_mt_path=outputs['mt'],
+            job_attrs=self.get_job_attrs(dataset),
+        )
+
+        return self.make_outputs(dataset, data=outputs, jobs=job)
 
 
 @stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
