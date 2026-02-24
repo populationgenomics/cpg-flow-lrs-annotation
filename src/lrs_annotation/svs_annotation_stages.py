@@ -10,15 +10,6 @@ from cpg_utils.config import AR_GUID_NAME, config_retrieve, try_get_ar_guid
 from cpg_utils.hail_batch import get_batch
 from google.api_core.exceptions import PermissionDenied
 from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
-from jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
-from jobs.svs.AnnotateCohortMatrixtable import annotate_cohort_jobs_svs
-from jobs.svs.AnnotateDatasetMatrixtable import annotate_dataset_jobs_sv
-from jobs.svs.AnnotateVcfGatk import queue_annotate_sv_jobs
-from jobs.svs.AnnotateVcfSTRVCTVRE import annotate_strvctvre_job
-from jobs.svs.MergeVcfs import merge_svs_vcf_with_bcftools
-from jobs.svs.ModifySvVcf import modify_sv_vcf
-from jobs.svs.ReformatVcfs import reformat_svs_vcf_with_bcftools
-from jobs.svs.WriteCleanedPedFile import make_clean_combined_ped
 from loguru import logger
 from utils import (
     es_password,
@@ -26,6 +17,18 @@ from utils import (
     get_dataset_names,
     get_query_filter_from_config,
     write_mapping_to_file,
+)
+
+from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
+from lrs_annotation.jobs.svs import (
+    AnnotateCohortMatrixtable,
+    AnnotateDatasetMatrixtable,
+    AnnotateVcfGatk,
+    AnnotateVcfSTRVCTVRE,
+    MergeVcfs,
+    ModifySvVcf,
+    ReformatVcfs,
+    WriteCleanedPedFileJobs,
 )
 
 
@@ -84,7 +87,7 @@ class WriteCleanedPedFile(stage.MultiCohortStage):
         """
         outputs = self.expected_outputs(multicohort)
         logger.info(f'Writing cleaned PED file to {outputs["ped_file"]}')
-        make_clean_combined_ped(multicohort.write_ped_file(), outputs['ped_file'])
+        WriteCleanedPedFileJobs.make_clean_combined_ped(multicohort.write_ped_file(), outputs['ped_file'])
         return self.make_outputs(multicohort, data=outputs)
 
 
@@ -132,7 +135,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
         job_name = f'Modify {"joint-called " if joint_called else ""}{vcf_path} prior to reformatting'
 
-        mod_job = modify_sv_vcf(
+        mod_job = ModifySvVcf.modify_sv_vcf(
             vcf_path=to_path(vcf_path),
             ref_fa_path=config_retrieve(['workflow', 'ref_fasta']),
             sex_mapping_file_path=lrs_id_sex_map,
@@ -174,7 +177,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
         vcf_path = inputs.as_path(sg, ModifySVsVcf, 'vcf')
         lrs_sg_id_mapping = inputs.as_path(get_multicohort(), WriteLrsIdToSgAndSexMappingFiles, 'lrs_sg_id_mapping')
 
-        reformatting_job = reformat_svs_vcf_with_bcftools(
+        reformatting_job = ReformatVcfs.reformat_svs_vcf_with_bcftools(
             batch=get_batch(),
             job_name=f'Reformat SVs VCF for {sg.id}',
             job_attrs={'tool': 'bcftools'},
@@ -219,7 +222,9 @@ class MergeSVsVcfsWithBcftools(stage.MultiCohortStage):
             if sgid in reformatted_vcfs
         ]
 
-        merge_job = merge_svs_vcf_with_bcftools(batch=get_batch(), vcf_paths=vcf_paths, job_attrs={'tool': 'bcftools'})
+        merge_job = MergeVcfs.merge_svs_vcf_with_bcftools(
+            batch=get_batch(), vcf_paths=vcf_paths, job_attrs={'tool': 'bcftools'}
+        )
 
         outputs = self.expected_outputs(multicohort)
         get_batch().write_output(merge_job.output, str(outputs['vcf']).removesuffix('.vcf.gz'))
@@ -253,7 +258,7 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
         else:
             input_vcf = inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf')
 
-        jobs = queue_annotate_sv_jobs(
+        jobs = AnnotateVcfGatk.queue_annotate_sv_jobs(
             dataset_name=multicohort.analysis_dataset,
             multicohort_name=multicohort.name,
             multicohort_ped_file_path=inputs.as_path(multicohort, WriteCleanedPedFile, 'ped_file'),
@@ -287,7 +292,7 @@ class AnnotateSVsWithStrvctvre(stage.MultiCohortStage):
             vcf_index=str(input_dict['annotated_vcf_index']),
         )['vcf']
 
-        strvctvre_job = annotate_strvctvre_job(
+        strvctvre_job = AnnotateVcfSTRVCTVRE.annotate_strvctvre_job(
             input_vcf=input_vcf,
             output_path=outputs['strvctvre_vcf'],
             job_attrs=self.get_job_attrs(),
@@ -315,7 +320,7 @@ class AnnotateCohortSVsMtFromVcfWithHail(stage.MultiCohortStage):
         outputs = self.expected_outputs(multicohort)
         vcf_path = inputs.as_path(target=multicohort, stage=AnnotateSVsWithStrvctvre, key='strvctvre_vcf')
 
-        job = annotate_cohort_jobs_svs(
+        job = AnnotateCohortMatrixtable.annotate_cohort_jobs_svs(
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
             gencode_gtf_path=config_retrieve(['workflow', 'gencode_gtf_file']),
@@ -361,7 +366,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         sg_hash = workflow.get_workflow().output_version
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'svs' / 'mt' / 'checkpoints'
 
-        jobs = annotate_dataset_jobs_sv(
+        jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs_sv(
             mt_path=mt_path,
             sg_ids=dataset.get_sequencing_group_ids(),
             out_mt_path=outputs['mt'],

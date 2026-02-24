@@ -7,8 +7,8 @@ from cpg_flow.filetypes import CramPath
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import get_batch
-from jobs.BamToCram import bam_to_cram
-from jobs.SomalierExtract import extract_somalier
+
+from lrs_annotation.jobs import BamToCram, SomalierExtract
 
 
 def make_long_read_cram_path(sg: targets.SequencingGroup) -> CramPath:
@@ -44,7 +44,7 @@ class ConvertBamToCram(stage.SequencingGroupStage):
         Using the existing `bam_to_cram` function from the `jobs` module.
         """
         input_bam = get_batch().read_input_group(bam=str(sg.alignment_input))
-        job = bam_to_cram(
+        job = BamToCram.bam_to_cram(
             b=get_batch(),
             input_bam=input_bam,
             job_attrs=self.get_job_attrs(sg),
@@ -66,7 +66,7 @@ class CramQcSomalier(stage.SequencingGroupStage):
 
         cram = inputs.as_str(sequencing_group, ConvertBamToCram, 'cram')
 
-        jobs = extract_somalier(
+        jobs = SomalierExtract.extract_somalier(
             cram_path=cram,
             output=output,
             job_attrs=self.get_job_attrs(sequencing_group),

@@ -6,7 +6,7 @@ from lrs_annotation.utils import get_resource_overrides_for_job
 
 def merge_svs_vcf_with_bcftools(
     batch: Batch,
-    vcf_paths: str,
+    vcf_paths: list[str],
     job_attrs: dict | None = None,
 ):
     """
