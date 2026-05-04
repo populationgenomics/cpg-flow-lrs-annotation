@@ -30,7 +30,6 @@ cpu_cores = 2
 memory_gib = '4Gi'
 storage_gib = '50Gi'
 
-
 [workflow.resource_overrides.export_mt_to_elastic]
 cpu_cores = 4
 memory = 'lowmem'

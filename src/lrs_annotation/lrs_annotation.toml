@@ -31,6 +31,9 @@ ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapie
 # prefer_joint_called = false
 # parental_id_suffixes = [ '01', '02', ]
 
+[references]
+avi_table = 'gs://cpg-common-main/alphagenome/combined_sigmoid_with_cpg.ht'
+
 [elasticsearch]
 # Configure access to ElasticSearch server
 port = '9243'

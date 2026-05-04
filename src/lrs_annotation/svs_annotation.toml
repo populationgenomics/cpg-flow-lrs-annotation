@@ -21,7 +21,7 @@ gencode_gtf_file = 'gs://cpg-common-main/references/hg38/v0/gencode_47.gtf.gz'
 external_af_population=['ALL', 'AFR', 'AMR', 'EAS', 'EUR', 'MID', 'FIN', 'ASJ', 'RMI', 'SAS', 'AMI']
 external_af_ref_bed_prefix = 'gnomad_v4.1_sv'
 noncoding_bed = 'gs://cpg-common-main/references/gatk-sv/hg38/v0/sv-resources/resources/v1/noncoding.sort.hg38.bed'
-strvctvre_phylop = 'gs://cpg-common-test/references/hg38.phyloP100way.bw'
+strvctvre_phylop = 'gs://cpg-common-main/references/hg38.phyloP100way.bw'
 
 [images]
 gatk_docker = "australia-southeast1-docker.pkg.dev/cpg-common/images/sv/gatk:2025-05-20-4.6.2.0-4-g1facd911e-NIGHTLY-SNAPSHOT"

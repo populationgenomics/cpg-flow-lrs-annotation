@@ -104,6 +104,11 @@ def annotate_cohort(
         clinvar_data=clinvar_ht[mt.row_key],
         ref_data=ref_ht[mt.row_key],
     )
+    if avi_table := config_retrieve(['references', 'avi_table'], None):
+        refavis_ht = hl.read_table(avi_table)
+        logger.info('Annotating with refavis data')
+        mt = mt.annotate_rows(avis=refavis_ht[mt.row_key].normalised_avis)
+        mt.describe()
 
     # this was previously executed in the MtToEs job, as it wasn't possible on QoB
     logger.info('Adding GRCh37 coords')
