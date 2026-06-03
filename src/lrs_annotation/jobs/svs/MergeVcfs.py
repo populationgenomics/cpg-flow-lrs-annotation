@@ -25,13 +25,15 @@ def merge_svs_vcf_with_bcftools(
     # BCFtools options breakdown:
     #   --threads: number of threads to use
     #   -m: merge strategy (none means multiple records for multiallelic sites)
-    #   -0: assume genotypes at missing sites are 0/0
+    #   -0: assume genotypes at missing sites are 0/0 (note - does not convert existing missing genotypes to 0/0)
     #   -Oz: bgzip output (compressed VCF)
     #   -o: output file name
     #   --write-index: write index file (only for bcftools 1.18+. Occasionally bugged for < 1.21)
+    #   +missing2ref: plugin to convert missing genotypes to homozygous reference (0/0)
     #   +fill-tags: plugin to compute and fill in the INFO tags (AF, AN, AC)
     merge_job.command(
         f'bcftools merge {" ".join(batch_vcfs)} --threads 4 -m none -0 -Ou | '
+        f'bcftools +missing2ref -Ou | '
         f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.gz"]} --write-index=tbi -- -t AF,AN,AC'
     )
 
