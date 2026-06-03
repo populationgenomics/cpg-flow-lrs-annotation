@@ -25,7 +25,7 @@ def merge_svs_vcf_with_bcftools(
     # BCFtools options breakdown:
     #   --threads: number of threads to use
     #   -m: merge strategy (none means multiple records for multiallelic sites)
-    #   -0: assume genotypes at missing sites are 0/0
+    #   -0: assume genotypes at missing sites are 0/0 (note - does not convert existing missing genotypes to 0/0)
     #   -Oz: bgzip output (compressed VCF)
     #   -o: output file name
     #   --write-index: write index file (only for bcftools 1.18+. Occasionally bugged for < 1.21)
