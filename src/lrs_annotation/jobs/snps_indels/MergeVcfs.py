@@ -31,8 +31,10 @@ def merge_snps_indels_vcf_with_bcftools(
     #   -o: output file name
     #   -W: write index file (only for bcftools 1.18+. Occasionally bugged for < 1.21)
     #   +fill-tags: plugin to compute and fill in the INFO tags (AF, AN, AC)
+    #   +missing2ref: plugin to convert missing genotypes to homozygous reference (0/0)
     merge_job.command(
         f'bcftools merge {" ".join(batch_vcfs)} --threads 4 -m none -0 -Ou | '
+        f'bcftools +missing2ref -Ou | '
         f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.gz"]} -W=tbi -- -t AF,AN,AC'
     )
 
