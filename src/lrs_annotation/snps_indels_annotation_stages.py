@@ -97,6 +97,9 @@ class ModifyVcf(stage.SequencingGroupStage):
             ' Adjust the query filter or the input cohorts'
         )
 
+        if sg.id not in sg_vcfs:
+            return None
+
         joint_called = sg_vcfs[sg.id]['meta'].get('joint_called', False)
 
         # Input VCF and reheadering file
