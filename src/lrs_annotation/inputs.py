@@ -98,6 +98,35 @@ LRS_IDS_QUERY = gql(
     }
     """,
 )
+def _select_best_file_for_sg(analyses: list[dict]) -> str | None:
+    """
+    Select the best file for somalier extract from a list of analyses.
+    Priority: any VCF (but not gVCF) > any gVCF > any CRAM.
+    We prefer VCFs to avoid heating CRAMs from cold storage.
+    gVCF regex is checked first so .g.vcf.gz doesn't match the plain VCF pattern.
+    """
+    vcfs = []
+    gvcfs = []
+    crams = []
+
+    for analysis in analyses:
+        output = analysis.get('output', '')
+        if not output:
+            continue
+        if _GVCF_PATTERN.search(output):
+            gvcfs.append(output)
+        elif _VCF_PATTERN.search(output):
+            vcfs.append(output)
+        elif _CRAM_PATTERN.search(output):
+            crams.append(output)
+
+    if vcfs:
+        return vcfs[0]
+    if gvcfs:
+        return gvcfs[0]
+    if crams:
+        return crams[0]
+    return None
 
 @functools.cache
 def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict] | None:
