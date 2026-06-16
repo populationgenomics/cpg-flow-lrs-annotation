@@ -3,11 +3,57 @@ Methods for querying Metamist for long-read sequencing VCFs and related metadata
 """
 
 from functools import cache
+import re
 
 from cpg_utils.config import config_retrieve
 from loguru import logger
 from metamist.graphql import gql, query
 from utils import get_dataset_name
+
+_VCF_PATTERN = re.compile(r'\.vcf(\.gz)?$')
+_GVCF_PATTERN = re.compile(r'\.g\.vcf(\.gz)?$')
+_CRAM_PATTERN = re.compile(r'\.cram$')
+
+PARTICIPANT_SGS_QUERY = gql(
+    """
+    query ParticipantSGs($project: String!, $sgId: [String!]!) {
+      project(name: $project) {
+        sequencingGroups(id: {in_: $sgId}) {
+          id
+          sample {
+            participant {
+              externalId
+              samples {
+                id
+                sequencingGroups {
+                  id
+                  type
+                  technology
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """,
+)
+
+SG_ANALYSES_QUERY = gql(
+    """
+    query SgAnalyses($project: String!, $sgIds: [String!]!) {
+      project(name: $project) {
+        sequencingGroups(id: {in_: $sgIds}) {
+          id
+          analyses {
+            output
+            meta
+          }
+        }
+      }
+    }
+    """,
+)
 
 VCF_QUERY = gql(
     """
