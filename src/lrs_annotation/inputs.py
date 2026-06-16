@@ -99,6 +99,75 @@ LRS_IDS_QUERY = gql(
     """,
 )
 
+@functools.cache
+def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict] | None:
+    """
+    Two-step query to find all SGs belonging to the same participant as the given SG,
+    across all technologies and platforms.
+
+    Query 1: SG -> sample -> participant -> samples -> sequencingGroups
+      Discovers the participant and all their SG IDs across all samples.
+
+    Query 2: Given those SG IDs, fetch analyses and select the best file per SG
+      (VCF > gVCF > CRAM).
+
+    Returns None if the participant has fewer than 2 SGs with usable files.
+    """
+    if config_retrieve(['workflow', 'access_level']) == 'test' and not project.endswith('-test'):
+        project += '-test'
+
+    # Query 1: Discover participant structure
+    response = query(
+        PARTICIPANT_SGS_QUERY,
+        variables={'project': project, 'sgId': [sg_id]},
+    )
+
+    sg_results = response['project']['sequencingGroups']
+    if not sg_results:
+        logger.warning(f'No sequencing group found for {sg_id} in {project}')
+        return None
+
+    participant = sg_results[0]['sample']['participant']
+    participant_id = participant['externalId']
+
+    # Collect all unique SG IDs across all samples for this participant
+    all_sg_ids: list[str] = []
+    for sample in participant['samples']:
+        for sg in sample['sequencingGroups']:
+            if sg['id'] not in all_sg_ids:
+                all_sg_ids.append(sg['id'])
+
+    if len(all_sg_ids) < 2:
+        logger.info(
+            f'{sg_id} :: Participant {participant_id} has {len(all_sg_ids)} SG(s), '
+            f'skipping self-relatedness check.',
+        )
+        return None
+
+    # Query 2: Fetch analyses for all discovered SGs
+    analyses_response = query(
+        SG_ANALYSES_QUERY,
+        variables={'project': project, 'sgIds': all_sg_ids},
+    )
+
+    sg_files: dict[str, str] = {}
+    for sg in analyses_response['project']['sequencingGroups']:
+        best_file = _select_best_file_for_sg(sg['analyses'])
+        if best_file:
+            sg_files[sg['id']] = best_file
+
+    if len(sg_files) < 2:
+        logger.info(
+            f'{sg_id} :: Participant {participant_id} has {len(sg_files)} SG(s) with files '
+            f'available for somalier, skipping self-relatedness check.',
+        )
+        return None
+
+    return {
+        'participant_id': participant_id,
+        'sg_ids': all_sg_ids,
+        'sg_files': sg_files,
+    }
 
 def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     """
