@@ -84,8 +84,10 @@ def somalier_self_check(
 
     for sg_id, localised_path in needs_extract.items():
         cmds.append(
-            f'somalier extract -d extracted/ --sites {sites} -f {ref.base} {localised_path}\n'
-            f'mv extracted/*.somalier extracted/{sg_id}.somalier'
+            f'mkdir -p tmp_{sg_id}\n'
+            f'somalier extract -d tmp_{sg_id}/ --sites {sites} -f {ref.base} {localised_path}\n'
+            f'mv tmp_{sg_id}/*.somalier extracted/{sg_id}.somalier\n'
+            f'cp extracted/{sg_id}.somalier {job[f"somalier_{sg_id}"]}'
         )
 
     ped_arg = ''
@@ -104,14 +106,8 @@ def somalier_self_check(
 
     job.command('\n'.join(cmds))
 
-    # Write .somalier files back to GCS for newly extracted SGs
     for sg_id in needs_extract:
-        somalier_output_gcs = str(somalier_dir / f'{sg_id}.somalier')
-        batch_instance.write_output(
-            job[f'somalier_{sg_id}'],
-            somalier_output_gcs,
-        )
-        job.command(f'cp extracted/{sg_id}.somalier {job[f"somalier_{sg_id}"]}')
+        batch_instance.write_output(job[f'somalier_{sg_id}'], str(somalier_dir / f'{sg_id}.somalier'))
 
     # Write relate outputs
     batch_instance.write_output(job.pairs_tsv, str(output_prefix) + '.pairs.tsv')
