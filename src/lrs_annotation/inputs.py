@@ -130,7 +130,7 @@ def _select_best_file_for_sg(analyses: list[dict]) -> str | None:
         return crams[0]
     return None
 
-@functools.cache
+@cache
 def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict] | None:
     """
     Two-step query to find all SGs belonging to the same participant as the given SG,
