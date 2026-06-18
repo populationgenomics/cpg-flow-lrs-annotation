@@ -18,7 +18,8 @@ from utils import (
     get_query_filter_from_config,
     write_mapping_to_file,
 )
-
+from lrs_annotation.inputs import query_for_participant_sgs
+from lrs_annotation.jobs import Somalier
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.svs import (
     AnnotateCohortMatrixtable,
@@ -31,6 +32,9 @@ from lrs_annotation.jobs.svs import (
     WriteCleanedPedFileJobs,
 )
 
+def _sg_ids_tag(sg_ids: list[str]) -> str:
+    """Sorted, underscore-joined SG IDs for use in output file names."""
+    return '_'.join(sorted(sg_ids))
 
 @stage.stage
 class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
@@ -91,7 +95,58 @@ class WriteCleanedPedFile(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs)
 
 
-@stage.stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles])
+@stage.stage()
+class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
+    """
+    For each SG, find all co-participant SGs, extract somalier fingerprints,
+    and run somalier relate to confirm they are the same person.
+    """
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
+        project = sequencing_group.dataset.name
+        result = query_for_participant_sgs(sequencing_group.id, project)
+        if result is None:
+            return None
+
+        sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
+        participant_id = result['participant_id']
+        prefix = sequencing_group.dataset.prefix() / 'somalier_checks'
+
+        return {
+            'pairs_tsv': prefix / f'{sg_tag}_{participant_id}.somalier_self_check.pairs.tsv',
+            'samples_tsv': prefix / f'{sg_tag}_{participant_id}.somalier_self_check.samples.tsv',
+            'html': prefix / f'{sg_tag}_{participant_id}.somalier_self_check.html',
+        }
+
+    def queue_jobs(
+        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput,
+    ) -> stage.StageOutput | None:
+        project = sequencing_group.dataset.name
+        result = query_for_participant_sgs(sequencing_group.id, project)
+        if result is None:
+            return None
+
+        participant_id = result['participant_id']
+        sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
+        outputs = self.expected_outputs(sequencing_group)
+
+        somalier_dir = sequencing_group.dataset.prefix() / 'somalier_checks' / 'extracted'
+        output_prefix = (
+            sequencing_group.dataset.prefix()
+            / 'somalier_checks'
+            / f'{sg_tag}_{participant_id}.somalier_self_check'
+        )
+
+        job = Somalier.somalier_self_check(
+            sg_files=result['sg_files'],
+            somalier_dir=somalier_dir,
+            output_prefix=output_prefix,
+            job_attrs=self.get_job_attrs(sequencing_group) | {'participant': participant_id},
+        )
+
+        return self.make_outputs(sequencing_group, data=outputs, jobs=[job])
+
+@stage.stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles, SomalierSelfRelatednessCheck])
 class ModifySVsVcf(stage.SequencingGroupStage):
     """
     Modify the long-read SV VCFs, saving them to temp storage for use in the next stage.
