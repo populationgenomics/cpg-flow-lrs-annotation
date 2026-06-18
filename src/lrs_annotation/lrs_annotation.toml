@@ -33,6 +33,7 @@ ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapie
 
 [references]
 avi_table = 'gs://cpg-common-main/alphagenome/combined_sigmoid_with_cpg.ht'
+somalier_sites = "gs://cpg-common-main/references/somalier/sites.hg38.vcf.gz"
 
 [elasticsearch]
 # Configure access to ElasticSearch server
