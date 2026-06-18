@@ -105,8 +105,6 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
         project = sequencing_group.dataset.name
         result = query_for_participant_sgs(sequencing_group.id, project)
-        if result is None:
-            return None
 
         sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
         participant_id = result['participant_id']
@@ -123,8 +121,6 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
     ) -> stage.StageOutput | None:
         project = sequencing_group.dataset.name
         result = query_for_participant_sgs(sequencing_group.id, project)
-        if result is None:
-            return None
 
         participant_id = result['participant_id']
         sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
