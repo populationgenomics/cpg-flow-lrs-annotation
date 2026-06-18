@@ -113,6 +113,8 @@ def _select_best_file_for_sg(analyses: list[dict]) -> str | None:
         output = analysis.get('output', '')
         if not output:
             continue
+        if analysis.get('meta', {}).get('joint_called', False):
+            continue
         if _GVCF_PATTERN.search(output):
             gvcfs.append(output)
         elif _VCF_PATTERN.search(output):
