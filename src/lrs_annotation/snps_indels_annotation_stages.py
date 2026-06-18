@@ -12,6 +12,7 @@ from google.api_core.exceptions import PermissionDenied
 from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from loguru import logger
 
+from lrs_annotation.jobs import Somalier
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.snps_indels import (
     AnnotateCohortMatrixtable,
@@ -20,7 +21,6 @@ from lrs_annotation.jobs.snps_indels import (
     MergeVcfs,
     ModifyVcfJobs,
     SplitVcfForVep,
-    Somalier,
     VcfToUnannotatedMt,
 )
 from lrs_annotation.utils import (
