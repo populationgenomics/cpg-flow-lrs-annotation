@@ -84,6 +84,12 @@ def main():  # noqa: PLR0915
                 )
                 # try the standard location
                 pacbio_cram_path = to_path(f'gs://cpg-{args.dataset}-main/long_read/cram/{sg_id}.cram')
+                if not pacbio_cram_path.exists():
+                    logger.info(
+                        f'CRAM file for sequencing group {sg_id} does not exist at expected path: {pacbio_cram_path}'
+                    )
+                    logger.info(f'Skipping SG {sg_id} since the CRAM file does not exist')
+                    continue
             pacbio_cram_timestamp_completed = sg_analyses[sg_id]['pacbio_cram']['timestampCompleted']
             pacbio_cram_meta = sg_analyses[sg_id]['pacbio_cram']['meta']
             pacbio_cram_analysis_id = sg_analyses[sg_id]['pacbio_cram']['id']
