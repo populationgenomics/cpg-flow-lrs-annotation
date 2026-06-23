@@ -11,16 +11,7 @@ from cpg_utils.hail_batch import get_batch
 from lrs_annotation.jobs import BamToCram, SomalierExtract
 
 
-def make_long_read_cram_path(sg: targets.SequencingGroup) -> CramPath:
-    """
-    Path to a CRAM file. Not checking its existence here.
-    """
-    path: Path = sg.dataset.prefix() / 'long_read' / 'cram' / f'{sg.id}.cram'
-    return CramPath(
-        path=path,
-        index_path=path.with_suffix('.cram.crai'),
-        reference_assembly=config_retrieve(['workflow', 'ref_fasta'], reference_path('broad/ref_fasta')),
-    )
+
 
 
 @stage.stage(
@@ -36,7 +27,7 @@ class ConvertBamToCram(stage.SequencingGroupStage):
         """
         Stage is expected to generate a CRAM file and a corresponding index.
         """
-        cram_path = sg.cram or make_long_read_cram_path(sg)
+        cram_path = sg.cram or sg.dataset.prefix() / 'cram' / f'{sg.id}.cram'
         return {'cram': cram_path.path, 'crai': cram_path.index_path}
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -59,7 +50,7 @@ class CramQcSomalier(stage.SequencingGroupStage):
     """Run somalier extract on a CRAM file."""
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
-        return make_long_read_cram_path(sequencing_group).somalier_path
+        return sg.cram or sg.dataset.prefix() / 'cram' / f'{sg.id}.cram.somalier'
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
         output = self.expected_outputs(sequencing_group)
