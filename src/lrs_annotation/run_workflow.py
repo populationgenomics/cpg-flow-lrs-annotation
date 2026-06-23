@@ -9,8 +9,8 @@ from argparse import ArgumentParser
 from cpg_flow.workflow import run_workflow
 
 from lrs_annotation.bam_to_cram_stages import ConvertBamToCram, CramQcSomalier
-from lrs_annotation.snps_indels_annotation_stages import ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt
-from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex
+from lrs_annotation.snps_indels_annotation_stages import SomalierSelfRelatednessCheck, ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt
+from lrs_annotation.svs_annotation_stages import SomalierSelfRelatednessCheck, ExportSVsMtToElasticIndex
 
 
 def cli_main():
@@ -25,9 +25,9 @@ def cli_main():
     if args.workflow == 'bam_to_cram':
         stages = [ConvertBamToCram, CramQcSomalier]
     elif args.workflow == 'snps_indels':
-        stages = [ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt]
+        stages = [SomalierSelfRelatednessCheck, ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt]
     elif args.workflow == 'svs':
-        stages = [ExportSVsMtToElasticIndex]
+        stages = [SomalierSelfRelatednessCheck, ExportSVsMtToElasticIndex]
     else:
         raise ValueError(f'Unknown workflow: {args.workflow}')
 
