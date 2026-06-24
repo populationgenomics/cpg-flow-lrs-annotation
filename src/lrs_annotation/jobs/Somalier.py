@@ -77,29 +77,14 @@ def somalier_self_check(
             needs_extract[sg_id] = str(localised)
 
     # Build shell commands: copy cached files, extract new ones
-    cmds = [
-        'mkdir -p extracted/',
-        '',
-        '# Debug: verify reference files are co-located',
-        f'echo "=== Reference FASTA ==="',
-        f'ls -lh {ref.base}',
-        f'echo "=== Reference .fai ==="',
-        f'ls -lh {ref.base}.fai || echo "MISSING: .fai not co-located with .fasta"',
-        f'echo "=== Reference .dict ==="',
-        f'ls -lh {ref.dict} || echo "MISSING: .dict"',
-        f'echo "=== Sites VCF ==="',
-        f'ls -lh {sites}',
-        '',
-    ]
+    cmds = ['mkdir -p extracted/']
 
     for sg_id, cached_path in cached_somalier.items():
         cmds.append(f'cp {cached_path} extracted/{sg_id}.somalier')
 
     for sg_id, localised_path in needs_extract.items():
         cmds.append(
-            f'echo "=== Input file for {sg_id} ==="\n'
-            f'ls -lh {localised_path}\n'
-            f'hexdump -C {localised_path} | head -4\n'
+            f'export SOMALIER_SAMPLE_NAME={sg_id}\n'
             f'mkdir -p tmp_{sg_id}\n'
             f'somalier extract -d tmp_{sg_id}/ --sites {sites} -f {ref.base} {localised_path}\n'
             f'mv tmp_{sg_id}/*.somalier extracted/{sg_id}.somalier\n'
