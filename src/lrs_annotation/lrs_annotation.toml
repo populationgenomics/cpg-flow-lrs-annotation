@@ -12,6 +12,7 @@ verbose = false
 # mandatory fields for cpg-flow
 input_cohorts = []
 sequencing_type = 'genome'
+sequencing_technology = 'long-read'
 
 ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
 
@@ -44,3 +45,6 @@ username = 'seqr'
 password_secret_id = 'seqr-es-password'
 password_project_id = 'seqr-308602'
 spot_instance = false # Don't use preemptible instances for ElasticSearch export jobs
+
+[images]
+somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
