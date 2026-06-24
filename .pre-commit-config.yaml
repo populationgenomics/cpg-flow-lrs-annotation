@@ -21,6 +21,7 @@ repos:
     hooks:
       - id: ruff-format
       - id: ruff
+        args: [--fix]
 
   # Static type analysis (as much as it's possible in python using type hints)
   - repo: https://github.com/pre-commit/mirrors-mypy
