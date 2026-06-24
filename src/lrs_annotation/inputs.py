@@ -2,13 +2,21 @@
 Methods for querying Metamist for long-read sequencing VCFs and related metadata.
 """
 
-from functools import cache
 import re
+from functools import cache
+from typing import TypedDict
 
 from cpg_utils.config import config_retrieve
 from loguru import logger
 from metamist.graphql import gql, query
 from utils import get_dataset_name
+
+
+class ParticipantSGsResult(TypedDict):
+    participant_id: str
+    sg_ids: list[str]
+    sg_files: dict[str, str]
+
 
 _VCF_PATTERN = re.compile(r'\.vcf(\.gz)?$')
 _GVCF_PATTERN = re.compile(r'\.g\.vcf(\.gz)?$')
@@ -98,6 +106,8 @@ LRS_IDS_QUERY = gql(
     }
     """,
 )
+
+
 def _select_best_file_for_sg(analyses: list[dict]) -> str | None:
     """
     Select the best file for somalier extract from a list of analyses.
@@ -130,8 +140,9 @@ def _select_best_file_for_sg(analyses: list[dict]) -> str | None:
         return crams[0]
     return None
 
+
 @cache
-def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict] | None:
+def query_for_participant_sgs(sg_id: str, project: str) -> ParticipantSGsResult | None:
     """
     Two-step query to find all SGs belonging to the same participant as the given SG,
     across all technologies and platforms.
@@ -144,6 +155,7 @@ def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict]
 
     Returns None if the participant has fewer than 2 SGs with usable files.
     """
+    min_sg_requirement = 2
     if config_retrieve(['workflow', 'access_level']) == 'test' and not project.endswith('-test'):
         project += '-test'
 
@@ -168,10 +180,9 @@ def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict]
             if sg['id'] not in all_sg_ids:
                 all_sg_ids.append(sg['id'])
 
-    if len(all_sg_ids) < 2:
+    if len(all_sg_ids) < min_sg_requirement:
         logger.info(
-            f'{sg_id} :: Participant {participant_id} has {len(all_sg_ids)} SG(s), '
-            f'skipping self-relatedness check.',
+            f'{sg_id} :: Participant {participant_id} has {len(all_sg_ids)} SG(s), skipping self-relatedness check.',
         )
         return None
 
@@ -187,7 +198,7 @@ def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict]
         if best_file:
             sg_files[sg['id']] = best_file
 
-    if len(sg_files) < 2:
+    if len(sg_files) < min_sg_requirement:
         logger.info(
             f'{sg_id} :: Participant {participant_id} has {len(sg_files)} SG(s) with files '
             f'available for somalier, skipping self-relatedness check.',
@@ -199,6 +210,7 @@ def query_for_participant_sgs(sg_id: str, project: str) -> dict[str, str | dict]
         'sg_ids': all_sg_ids,
         'sg_files': sg_files,
     }
+
 
 def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     """

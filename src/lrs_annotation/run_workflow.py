@@ -10,13 +10,17 @@ from cpg_flow.workflow import run_workflow
 
 from lrs_annotation.bam_to_cram_stages import ConvertBamToCram, CramQcSomalier
 from lrs_annotation.snps_indels_annotation_stages import (
-    SomalierSelfRelatednessCheck as SnpsIndelsSomalierCheck,
     ExportSnpsIndelsMtToESIndex,
     ExportSnpsIndelsVcfToMt,
 )
+from lrs_annotation.snps_indels_annotation_stages import (
+    SomalierSelfRelatednessCheck as SnpsIndelsSomalierCheck,
+)
+from lrs_annotation.svs_annotation_stages import (
+    ExportSVsMtToElasticIndex,
+)
 from lrs_annotation.svs_annotation_stages import (
     SomalierSelfRelatednessCheck as SvsSomalierCheck,
-    ExportSVsMtToElasticIndex,
 )
 
 

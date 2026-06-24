@@ -12,6 +12,7 @@ from google.api_core.exceptions import PermissionDenied
 from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from loguru import logger
 
+from lrs_annotation.inputs import query_for_participant_sgs
 from lrs_annotation.jobs import Somalier
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.snps_indels import (
@@ -31,11 +32,12 @@ from lrs_annotation.utils import (
     joint_calling_scatter_count,
     write_mapping_to_file,
 )
-from lrs_annotation.inputs import query_for_participant_sgs
+
 
 def _sg_ids_tag(sg_ids: list[str]) -> str:
     """Sorted, underscore-joined SG IDs for use in output file names."""
     return '_'.join(sorted(sg_ids))
+
 
 @stage.stage
 class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
@@ -79,6 +81,8 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
         project = sequencing_group.dataset.name
         result = query_for_participant_sgs(sequencing_group.id, project)
+        if result is None:
+            return None
 
         sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
         participant_id = result['participant_id']
@@ -91,10 +95,14 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
         }
 
     def queue_jobs(
-        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput,
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,
     ) -> stage.StageOutput | None:
         project = sequencing_group.dataset.name
         result = query_for_participant_sgs(sequencing_group.id, project)
+        if result is None:
+            return None
 
         participant_id = result['participant_id']
         sg_tag = _sg_ids_tag(list(result['sg_files'].keys()))
@@ -102,9 +110,7 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
 
         somalier_dir = sequencing_group.dataset.prefix() / 'somalier_checks' / 'extracted'
         output_prefix = (
-            sequencing_group.dataset.prefix()
-            / 'somalier_checks'
-            / f'{sg_tag}_{participant_id}.somalier_self_check'
+            sequencing_group.dataset.prefix() / 'somalier_checks' / f'{sg_tag}_{participant_id}.somalier_self_check'
         )
 
         job = Somalier.somalier_self_check(
@@ -115,6 +121,7 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=[job])
+
 
 @stage.stage(required_stages=[WriteLrsIdToSgIdMappingFile, SomalierSelfRelatednessCheck])
 class ModifyVcf(stage.SequencingGroupStage):

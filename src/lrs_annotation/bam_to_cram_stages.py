@@ -3,15 +3,11 @@ Workflow for annotating long-read SVs data into a seqr-ready format.
 """
 
 from cpg_flow import stage, targets
-from cpg_flow.filetypes import CramPath
 from cpg_utils import Path
-from cpg_utils.config import config_retrieve, reference_path
+from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.jobs import BamToCram, SomalierExtract
-
-
-
 
 
 @stage.stage(
@@ -49,7 +45,7 @@ class ConvertBamToCram(stage.SequencingGroupStage):
 class CramQcSomalier(stage.SequencingGroupStage):
     """Run somalier extract on a CRAM file."""
 
-    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
+    def expected_outputs(self, sg: targets.SequencingGroup) -> Path:
         return sg.cram or sg.dataset.prefix() / 'cram' / f'{sg.id}.cram.somalier'
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:

@@ -10,7 +10,6 @@ from cpg_flow.utils import exists
 from cpg_utils import Path, config, hail_batch
 from hailtop.batch.job import Job
 
-
 _CRAM_PATTERN = re.compile(r'\.cram$')
 
 
@@ -45,7 +44,8 @@ def somalier_self_check(
     has_cram = any(_CRAM_PATTERN.search(path) for path in sg_files.values())
     if has_cram:
         storage_gb = config.config_retrieve(
-            ['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'], 50,
+            ['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'],
+            50,
         )
         job.storage(f'{storage_gb}GB')
     else:
@@ -56,8 +56,8 @@ def somalier_self_check(
 
     # For each SG, check at orchestration time if .somalier already exists.
     # If so, use read_input to load it. Otherwise, localise the input file for extraction.
-    cached_somalier: dict[str, str] = {}      # sg_id -> localised cached .somalier path
-    needs_extract: dict[str, str] = {}         # sg_id -> localised input file path
+    cached_somalier: dict[str, str] = {}  # sg_id -> localised cached .somalier path
+    needs_extract: dict[str, str] = {}  # sg_id -> localised input file path
 
     for sg_id, file_path in sg_files.items():
         somalier_output_path = somalier_dir / f'{sg_id}.somalier'
@@ -95,14 +95,16 @@ def somalier_self_check(
         localised_ped = batch_instance.read_input(ped_file)
         ped_arg = f'--ped {localised_ped}'
 
-    cmds.extend([
-        '',
-        '# Relate all extracted fingerprints',
-        f'somalier relate {ped_arg} -o results extracted/*.somalier',
-        f'mv results.pairs.tsv {job.pairs_tsv}',
-        f'mv results.samples.tsv {job.samples_tsv}',
-        f'mv results.html {job.html}',
-    ])
+    cmds.extend(
+        [
+            '',
+            '# Relate all extracted fingerprints',
+            f'somalier relate {ped_arg} -o results extracted/*.somalier',
+            f'mv results.pairs.tsv {job.pairs_tsv}',
+            f'mv results.samples.tsv {job.samples_tsv}',
+            f'mv results.html {job.html}',
+        ]
+    )
 
     job.command('\n'.join(cmds))
 
