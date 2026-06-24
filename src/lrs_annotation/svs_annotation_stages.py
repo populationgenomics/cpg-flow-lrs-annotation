@@ -140,14 +140,17 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
             sequencing_group.dataset.prefix() / 'somalier_checks' / f'{sg_tag}_{participant_id}.somalier_self_check'
         )
 
-        job = Somalier.somalier_self_check(
+        jobs = Somalier.somalier_self_check(
             sg_files=result['sg_files'],
             somalier_dir=somalier_dir,
             output_prefix=output_prefix,
             job_attrs=self.get_job_attrs(sequencing_group) | {'participant': participant_id},
+            sg_id=sequencing_group.id,
+            participant_id=participant_id,
+            dataset_name=project,
         )
 
-        return self.make_outputs(sequencing_group, data=outputs, jobs=[job])
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
 @stage.stage(required_stages=[WriteLrsIdToSgAndSexMappingFiles, SomalierSelfRelatednessCheck])
