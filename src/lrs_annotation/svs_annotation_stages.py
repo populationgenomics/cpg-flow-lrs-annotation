@@ -145,7 +145,7 @@ class SomalierSelfRelatednessCheck(stage.SequencingGroupStage):
             somalier_dir=somalier_dir,
             output_prefix=output_prefix,
             job_attrs=self.get_job_attrs(sequencing_group) | {'participant': participant_id},
-            sg_id=sequencing_group.id,
+            stage_sg_id=sequencing_group.id,
             participant_id=participant_id,
             dataset_name=project,
         )

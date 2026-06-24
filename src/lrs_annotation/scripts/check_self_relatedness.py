@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """
 Check somalier self-relatedness results for a single participant.
 If any SG pair has kinship below the threshold, sends a Slack alert.
@@ -41,7 +39,7 @@ def run(
             n = int(row['n'])
 
             logger.info(
-                f"  {row['#sample_a']} - {row['sample_b']}: "
+                f'  {row["#sample_a"]} - {row["sample_b"]}: '
                 f'relatedness={relatedness}, ibs0={ibs0}, ibs2={ibs2}, '
                 f'hom_concordance={hom_concordance}, '
                 f'hets_a={hets_a}, hets_b={hets_b}, shared_hets={shared_hets}, '
@@ -50,13 +48,15 @@ def run(
             )
 
             if relatedness < kinship_threshold:
-                low_kinship_pairs.append({
-                    'sample_a': row['#sample_a'],
-                    'sample_b': row['sample_b'],
-                    'relatedness': relatedness,
-                    'ibs0': ibs0,
-                    'ibs2': ibs2,
-                })
+                low_kinship_pairs.append(
+                    {
+                        'sample_a': row['#sample_a'],
+                        'sample_b': row['sample_b'],
+                        'relatedness': relatedness,
+                        'ibs0': ibs0,
+                        'ibs2': ibs2,
+                    }
+                )
 
     if not low_kinship_pairs:
         logger.info(
@@ -70,9 +70,9 @@ def run(
     ]
     for pair in low_kinship_pairs:
         lines.append(
-            f"  {pair['sample_a']} - {pair['sample_b']}: "
-            f"kinship={pair['relatedness']}, "
-            f"ibs0={pair['ibs0']}, ibs2={pair['ibs2']}",
+            f'  {pair["sample_a"]} - {pair["sample_b"]}: '
+            f'kinship={pair["relatedness"]}, '
+            f'ibs0={pair["ibs0"]}, ibs2={pair["ibs2"]}',
         )
 
     text = '\n'.join(lines)

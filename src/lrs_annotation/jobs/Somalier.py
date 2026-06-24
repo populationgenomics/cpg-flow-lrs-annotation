@@ -18,7 +18,7 @@ def somalier_self_check(
     somalier_dir: Path,
     output_prefix: Path,
     job_attrs: dict[str, str],
-    sg_id: str,
+    stage_sg_id: str,
     participant_id: str,
     dataset_name: str,
     ped_file: str | None = None,
@@ -122,7 +122,8 @@ def somalier_self_check(
 
     # Check self-relatedness and alert via Slack if kinship < threshold
     kinship_threshold = config.config_retrieve(
-        ['workflow', 'somalier_self_check', 'kinship_threshold'], 0.9,
+        ['workflow', 'somalier_self_check', 'kinship_threshold'],
+        0.9,
     )
     check_job = batch_instance.new_job('Somalier self-check alert', job_attrs)
     check_job.image(config.config_retrieve(['workflow', 'driver_image']))
@@ -133,7 +134,7 @@ def somalier_self_check(
     check_job.command(f"""\
     python3 -m lrs_annotation.scripts.check_self_relatedness \\
     --pairs-tsv {job.pairs_tsv} \\
-    --sg-id {sg_id} \\
+    --sg-id {stage_sg_id} \\
     --participant-id {participant_id} \\
     --dataset {dataset_name} \\
     --kinship-threshold {kinship_threshold}
