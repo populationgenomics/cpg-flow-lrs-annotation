@@ -54,7 +54,7 @@ class ConvertBamToCram(stage.SequencingGroupStage):
         return self.make_outputs(sg, data=self.expected_outputs(sg), jobs=[job])
 
 
-@stage.stage(required_stages=[ConvertBamToCram])
+@stage.stage(required_stages=[ConvertBamToCram], analysis_type='somalier')
 class CramQcSomalier(stage.SequencingGroupStage):
     """Run somalier extract on a CRAM file."""
 
@@ -70,6 +70,7 @@ class CramQcSomalier(stage.SequencingGroupStage):
             cram_path=cram,
             output=output,
             job_attrs=self.get_job_attrs(sequencing_group),
+            sample_name=sequencing_group.id,
         )
 
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
