@@ -19,7 +19,7 @@ from cpg_utils.config import ConfigError, config_retrieve, dataset_for_access_le
 from cpg_utils.cromwell import CromwellOutputType, run_cromwell_workflow_from_repo_and_get_outputs
 from cpg_utils.hail_batch import command, get_batch
 
-GATK_SV_COMMIT = config_retrieve(['workflow', 'gatk_sv_commit'])
+GATK_SV_COMMIT = config_retrieve(['workflow', 'gatk_sv_commit'], '890582922bccb4b651275506a34311c949417f6c')
 
 
 class CromwellJobSizes(Enum):
