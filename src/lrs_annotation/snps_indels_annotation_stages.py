@@ -54,8 +54,8 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
 
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
-            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
+            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),  # type: ignore[arg-type]
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),  # type: ignore[arg-type]
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
 
