@@ -119,7 +119,7 @@ class ModifyVcf(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
-@stage.stage(required_stages=ModifyVcf)
+@stage.stage(required_stages=ModifyVcf, analysis_type='joint-calling', analysis_keys=['vcf'])
 class MergeVcfsWithBcftools(stage.MultiCohortStage):
     """
     Merge the reformatted SNPs Indels VCFs together with bcftools
@@ -162,7 +162,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools], analysis_keys=['mt'], analysis_type='matrixtable')
 class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
     """
     Writes the merged VCF to a matrix table at the dataset level, without any annotation.
