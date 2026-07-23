@@ -4,10 +4,10 @@ Methods for querying Metamist for long-read sequencing VCFs and related metadata
 
 from functools import cache
 
-from cpg_utils.config import config_retrieve
 from loguru import logger
+
+from cpg_utils.config import config_retrieve, dataset_for_access_level
 from metamist.graphql import gql, query
-from utils import get_dataset_name
 
 VCF_QUERY = gql(
     """
@@ -94,7 +94,7 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
 
 
 @cache
-def query_for_lrs_vcfs(dataset_name: str) -> dict[str, dict | list[str]]:
+def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     """
     Query metamist for the long-read sequencing VCFs. The VCFs are filtered by the values specified in
     the workflow.query_filters config dictionary, using the analysis.meta field.
@@ -175,10 +175,7 @@ def query_for_lrs_vcfs(dataset_name: str) -> dict[str, dict | list[str]]:
         )
     if not query_filters.get('prefer_joint_called', False):
         # If we are not preferring joint-called VCFs, just return the single-sample VCFs
-        return {
-            'sg_ids': list(single_sample_vcfs.keys()),
-            'vcfs': single_sample_vcfs,
-        }
+        return list(single_sample_vcfs.keys()), single_sample_vcfs
 
     # If joint_called is True, we need to query for the joint-called trio VCFs
     # and prefer them over the single-sample VCFs of parents in joint-called trios
@@ -228,13 +225,10 @@ def query_for_lrs_vcfs(dataset_name: str) -> dict[str, dict | list[str]]:
             continue
         vcfs_for_sgs[sg_id] = vcf_analysis
 
-    return {
-        # SG IDs include the skipped parental ones, so that we can still
-        # reference them in the workflow, but the vcfs dict only contains
-        # the VCFs that are not skipped.
-        'sg_ids': list(vcfs_for_sgs.keys()) + list(sgs_to_skip),
-        'vcfs': vcfs_for_sgs,
-    }
+    # SG IDs include the skipped parental ones, so that we can still
+    # reference them in the workflow, but the vcfs dict only contains
+    # the VCFs that are not skipped.
+    return list(vcfs_for_sgs.keys()) + list(sgs_to_skip), vcfs_for_sgs
 
 
 def query_for_lrs_mappings(
@@ -292,7 +286,7 @@ def get_lrs_id_from_sample(
     return sample['meta'].get('lrs_id', None)
 
 
-def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str] | dict]:
+def get_sgs_from_datasets(multicohort_datasets: list[str]) -> tuple[list[str], dict]:
     """
     Returns the sequencing group IDs from multicohort datasets, filtered to the
     sequencing groups that are actually present in the workflow run.
@@ -300,6 +294,7 @@ def get_sgs_from_datasets(multicohort_datasets: list[str]) -> dict[str, list[str
     sg_ids: list[str] = []
     vcfs: dict[str, dict] = {}
     for dataset in multicohort_datasets:
-        sg_ids.extend(query_for_lrs_vcfs(get_dataset_name(dataset))['sg_ids'])
-        vcfs.update(query_for_lrs_vcfs(get_dataset_name(dataset))['vcfs'])  # type: ignore[arg-type]
-    return {'sg_ids': sg_ids, 'vcfs': vcfs}
+        query_sgs, query_vcfs = query_for_lrs_vcfs(dataset_for_access_level(dataset))
+        sg_ids.extend(query_sgs)
+        vcfs.update(query_vcfs)  # type: ignore[arg-type]
+    return sg_ids, vcfs

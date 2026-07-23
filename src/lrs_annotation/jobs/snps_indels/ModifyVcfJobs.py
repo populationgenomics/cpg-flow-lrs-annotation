@@ -1,6 +1,7 @@
+from hailtop.batch.job import Job
+
 from cpg_utils import Path, hail_batch
 from cpg_utils.config import config_retrieve
-from hailtop.batch.job import Job
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 

@@ -1,8 +1,9 @@
 from typing import Any
 
+from hailtop.batch.job import Job
+
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
-from hailtop.batch.job import Job
 
 from lrs_annotation.utils import add_gatk_sv_jobs, get_images, get_references
 

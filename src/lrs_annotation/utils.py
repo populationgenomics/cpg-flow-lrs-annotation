@@ -9,14 +9,15 @@ from os.path import join
 from random import randint
 from typing import Any
 
+from hailtop.batch.job import BashJob, Job
+
 from cpg_flow import targets
 from cpg_flow.utils import logger
 from cpg_utils import Path
 from cpg_utils.cloud import read_secret
-from cpg_utils.config import ConfigError, config_retrieve, image_path, reference_path
+from cpg_utils.config import ConfigError, config_retrieve, dataset_for_access_level, image_path, reference_path
 from cpg_utils.cromwell import CromwellOutputType, run_cromwell_workflow_from_repo_and_get_outputs
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch.job import BashJob, Job
 
 GATK_SV_COMMIT = config_retrieve(['workflow', 'gatk_sv_commit'])
 
@@ -31,19 +32,11 @@ class CromwellJobSizes(Enum):
     LARGE = 'large'
 
 
-def get_dataset_name(dataset: str) -> str:
-    """
-    Add -test suffix to dataset name if in test mode.
-    """
-    test = config_retrieve(['workflow', 'access_level']) == 'test'
-    return dataset + '-test' if test else dataset
-
-
 def get_dataset_names(datasets: str | list[str]) -> list[str]:
     """
     Add -test suffix to dataset names if in test mode.
     """
-    return [get_dataset_name(dataset) for dataset in datasets]
+    return [dataset_for_access_level(dataset) for dataset in datasets]
 
 
 def get_query_filter_from_config(field_name: str, make_tuple=True) -> tuple[str] | list[str] | None:

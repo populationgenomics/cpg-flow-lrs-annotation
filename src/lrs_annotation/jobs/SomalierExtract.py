@@ -2,8 +2,9 @@
 Job for CRAM fingerprinting using Somalier.
 """
 
-from cpg_utils import Path, config, hail_batch
 from hailtop.batch.job import Job
+
+from cpg_utils import Path, config, hail_batch
 
 
 def extract_somalier(
