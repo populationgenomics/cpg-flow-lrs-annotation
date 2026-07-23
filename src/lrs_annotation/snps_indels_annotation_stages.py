@@ -162,7 +162,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools], analysis_keys=['mt'], analysis_type='matrixtable')
 class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
     """
     Writes the merged VCF to a matrix table at the dataset level, without any annotation.
