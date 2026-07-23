@@ -37,3 +37,6 @@ storage_gib = '50Gi'
 [workflow.resource_overrides.export_mt_to_elastic]
 cpu_cores = 4
 memory = 'lowmem'
+
+[images]
+bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.23.1'
