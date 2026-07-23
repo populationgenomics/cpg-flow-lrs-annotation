@@ -119,7 +119,7 @@ class ModifyVcf(stage.SequencingGroupStage):
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
-@stage.stage(required_stages=ModifyVcf, analysis_type='joint-calling', analysis_keys=['vcf'])
+@stage.stage(required_stages=ModifyVcf)
 class MergeVcfsWithBcftools(stage.MultiCohortStage):
     """
     Merge the reformatted SNPs Indels VCFs together with bcftools
