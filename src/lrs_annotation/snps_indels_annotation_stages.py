@@ -2,16 +2,17 @@
 Workflow for annotating long-read SNPs and Indels data into a seqr-ready format.
 """
 
+from google.api_core.exceptions import PermissionDenied
+from loguru import logger
+
 from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
-from google.api_core.exceptions import PermissionDenied
-from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
-from loguru import logger
 
+from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.snps_indels import (
     AnnotateCohortMatrixtable,
@@ -53,8 +54,8 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
 
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
-            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
+            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),  # type: ignore[arg-type]
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),  # type: ignore[arg-type]
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
 
@@ -77,19 +78,19 @@ class ModifyVcf(stage.SequencingGroupStage):
             'index': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz.tbi',
         }
 
-    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
         multicohort_datasets = [ds.name for ds in get_multicohort().get_datasets()]
-        sg_ids = []
-        sg_vcfs = {}
+        sg_ids: list[str] = []
+        sg_vcfs: dict[str, dict] = {}
         for ds in multicohort_datasets:
-            sgs = query_for_lrs_vcfs(dataset_name=ds)
-            sg_ids.extend(sgs['sg_ids'])
-            sg_vcfs.update(sgs['vcfs'])
+            query_sg_ids, query_vcfs = query_for_lrs_vcfs(dataset_name=ds)
+            sg_ids.extend(query_sg_ids)
+            sg_vcfs.update(query_vcfs)
 
         assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), (
             'SGs in the multicohort do not have VCFs matching the filter criteria: '
@@ -135,11 +136,10 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
-        sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
+        _, sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
 
         # Get the reformatted VCFs from the previous stage
-        reformatted_vcfs = inputs.as_dict_by_target(ModifyVcf)
-        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']}
+        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in inputs.as_dict_by_target(ModifyVcf).items() if sg_id in sgs}
 
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
@@ -461,9 +461,10 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
 
+        sg_ids, _ = get_sgs_from_datasets([dataset.name])
         req_storage = tshirt_mt_sizing(
             sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
-            cohort_size=len(get_sgs_from_datasets([dataset.name])),
+            cohort_size=len(sg_ids),
         )
         # set all job attributes in one bash
         job = export_mt_to_elasticsearch(

@@ -1,5 +1,9 @@
 [workflow]
-name = 'snps_indels_annotation'
+
+gatk_sv_commit = '890582922bccb4b651275506a34311c949417f6c'
+
+[references]
+ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
 
 [workflow.query_filters]
 # sequencing_types = [ 'genome', 'adaptive_sampling', ]
@@ -33,3 +37,6 @@ storage_gib = '50Gi'
 [workflow.resource_overrides.export_mt_to_elastic]
 cpu_cores = 4
 memory = 'lowmem'
+
+[images]
+bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.24-1'

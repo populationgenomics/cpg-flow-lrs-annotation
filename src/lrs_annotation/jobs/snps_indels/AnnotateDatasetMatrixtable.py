@@ -1,9 +1,11 @@
+from loguru import logger
+
+from hailtop.batch.job import Job
+
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
-from hailtop.batch.job import Job
-from loguru import logger
 
 from lrs_annotation.scripts import subset_mt_to_sgs
 from lrs_annotation.scripts.snps_indels import annotate_dataset_mt

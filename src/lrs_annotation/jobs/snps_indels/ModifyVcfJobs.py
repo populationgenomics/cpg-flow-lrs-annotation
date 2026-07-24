@@ -1,6 +1,7 @@
+from hailtop.batch.job import Job
+
 from cpg_utils import Path, hail_batch
 from cpg_utils.config import config_retrieve
-from hailtop.batch.job import Job
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 
@@ -27,7 +28,7 @@ def bcftools_reformat(
     local_id_mapping = batch_instance.read_input(lrs_sg_id_mapping_path)
 
     # Required file for normalisation
-    ref_fasta = config_retrieve(['workflow', 'ref_fasta'])
+    ref_fasta = config_retrieve(['references', 'ref_fasta'])
     fasta = batch_instance.read_input_group(**{'fa': ref_fasta, 'fa.fai': f'{ref_fasta}.fai'})['fa']
 
     # Use BCFtools to reheader the VCF, replacing the LRS IDs with the SG IDs
