@@ -2,8 +2,6 @@
 Workflow for annotating long-read SVs data into a seqr-ready format.
 """
 
-import functools
-
 from google.api_core.exceptions import PermissionDenied
 from loguru import logger
 
@@ -36,6 +34,7 @@ from lrs_annotation.utils import (
 )
 
 WORKFLOW_NAME = 'svs'
+
 
 @stage.stage
 class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):

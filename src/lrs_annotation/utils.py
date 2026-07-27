@@ -93,6 +93,7 @@ def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
 
     return {'family_sg_ids': family_sg_ids, 'name_suffix': name_suffix}
 
+
 @cache
 def get_sg_vcfs_file_path(workflow_name: str) -> Path:
     """
@@ -207,6 +208,7 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
         if sequencing_group_count >= threshold:
             return scatter_count
     return 50
+
 
 def write_to_json(data: dict, output_path: Path) -> None:
     """
