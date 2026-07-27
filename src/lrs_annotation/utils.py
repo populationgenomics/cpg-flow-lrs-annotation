@@ -197,7 +197,7 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
     return 50
 
 
-def write_mapping_to_file(mapping: dict[str, str], output_path: Path) -> None:
+def write_mapping_to_file(mapping: dict, output_path: Path) -> None:
     """
     Write a mapping to a file
     """

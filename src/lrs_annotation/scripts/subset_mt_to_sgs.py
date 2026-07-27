@@ -9,7 +9,11 @@ from cpg_utils.hail_batch import init_batch
 from lrs_annotation.utils import get_init_batch_args_for_job
 
 
-def subset_mt_to_sgs(mt_path: str, sg_ids: list[str], out_mt_path: str):
+def subset_mt_to_sgs(
+    mt_path: str,
+    sg_ids: list[str],
+    out_mt_path: str,
+):
     """
     Subset the MatrixTable to the provided list of sgs and to variants present
     in those sgs

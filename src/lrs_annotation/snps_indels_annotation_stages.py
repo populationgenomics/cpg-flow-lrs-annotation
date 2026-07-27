@@ -2,6 +2,8 @@
 Workflow for annotating long-read SNPs and Indels data into a seqr-ready format.
 """
 
+import functools
+
 from google.api_core.exceptions import PermissionDenied
 from loguru import logger
 
@@ -31,6 +33,15 @@ from lrs_annotation.utils import (
     joint_calling_scatter_count,
     write_mapping_to_file,
 )
+
+
+@functools.cache
+def get_sg_vcfs_file_path() -> Path:
+    """
+    Get the path to the SG VCFs file for this multicohort
+    """
+    sg_hash = workflow.get_workflow().output_version
+    return get_multicohort().analysis_dataset.prefix() / 'snps_indels' / sg_hash / 'input_vcfs.json'
 
 
 @stage.stage
@@ -116,6 +127,21 @@ class ModifyVcf(stage.SequencingGroupStage):
 
         outputs = self.expected_outputs(sg)
         get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.gz'))
+
+        # Write out the VCFs for this multicohort
+        sg_vcfs_file = get_sg_vcfs_file_path()
+        if not sg_vcfs_file.exists():
+            logger.info(f'Writing input VCFs to {sg_vcfs_file}')
+            sg_vcfs_to_write = {
+                sg_id: {
+                    'original_vcf': str(sg_vcfs[sg_id]['vcf']),
+                    'reformatted_vcf': str(outputs['vcf']),
+                    'meta': sg_vcfs[sg_id]['meta'],
+                }
+                for sg_id in sg_ids
+                if sg_id in sg_vcfs
+            }
+            write_mapping_to_file(sg_vcfs_to_write, sg_vcfs_file)
 
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
@@ -344,7 +370,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage.stage(required_stages=[AnnotateCohortMtFromVcfWithHail], analysis_type='matrixtable', analysis_keys=['mt'])
+@stage.stage(required_stages=[AnnotateCohortMtFromVcfWithHail])
 class SubsetMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the multicohort Matrixtable to a single dataset
@@ -383,7 +409,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         if family_sgs := get_family_sequencing_groups(dataset):
             sg_ids = family_sgs['family_sg_ids']
         else:
-            sg_ids = dataset.get_sequencing_group_ids()
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
 
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
@@ -393,9 +419,12 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
+            dataset=dataset.name,
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
+            seqr_dataset_type='SNV_INDEL',
+            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -403,12 +432,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=[SubsetMtToDatasetWithHail],
-    analysis_type='es-index',
-    analysis_keys=['done_flag'],
-    update_analysis_meta=lambda x: {'seqr-dataset-type': 'SNV_INDEL'},  # noqa: ARG005
-)
+@stage.stage(required_stages=[SubsetMtToDatasetWithHail])
 class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
     """
     Create a Seqr index
@@ -461,7 +485,10 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
 
-        sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        if family_sgs := get_family_sequencing_groups(dataset):
+            sg_ids = family_sgs['family_sg_ids']
+        else:
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
         req_storage = tshirt_mt_sizing(
             sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
             cohort_size=len(sg_ids),
@@ -469,10 +496,14 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         # set all job attributes in one bash
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
+            dataset=dataset.name,
             mt_path=mt_path,
             index_name=index_name,
             flag_name=flag_name,
             req_storage=req_storage,
+            sg_ids=sg_ids,
+            seqr_dataset_type='SNV_INDEL',
+            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
             job_name=f'Export {index_name} from {mt_name}',
             job_attrs=self.get_job_attrs(dataset),
         )

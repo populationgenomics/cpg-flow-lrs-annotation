@@ -2,15 +2,10 @@
 Workflow for annotating long-read SVs data into a seqr-ready format.
 """
 
+import functools
+
 from google.api_core.exceptions import PermissionDenied
 from loguru import logger
-from utils import (
-    es_password,
-    get_dataset_name,
-    get_dataset_names,
-    get_query_filter_from_config,
-    write_mapping_to_file,
-)
 
 from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
@@ -31,6 +26,21 @@ from lrs_annotation.jobs.svs import (
     ReformatVcfs,
     WriteCleanedPedFileJobs,
 )
+from lrs_annotation.utils import (
+    es_password,
+    get_dataset_names,
+    get_query_filter_from_config,
+    write_mapping_to_file,
+)
+
+
+@functools.cache
+def get_sg_vcfs_file_path() -> Path:
+    """
+    Get the path to the SG VCFs file for this multicohort
+    """
+    sg_hash = workflow.get_workflow().output_version
+    return get_multicohort().analysis_dataset.prefix() / 'svs' / sg_hash / 'input_vcfs.json'
 
 
 @stage.stage
@@ -57,8 +67,8 @@ class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
 
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
-            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
+            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),  # type: ignore[arg-type]
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),  # type: ignore[arg-type]
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
         lrs_sex_mapping = {lrs_id: mapping['sex'] for lrs_id, mapping in lrs_mapping.items()}
@@ -148,6 +158,21 @@ class ModifySVsVcf(stage.SequencingGroupStage):
         expected_outputs = self.expected_outputs(sg)
         get_batch().write_output(mod_job.vcf_out, str(expected_outputs['vcf']).removesuffix('.vcf.gz'))
 
+        # Write out the VCFs for this multicohort
+        sg_vcfs_file = get_sg_vcfs_file_path()
+        if not sg_vcfs_file.exists():
+            logger.info(f'Writing input VCFs to {sg_vcfs_file}')
+            sg_vcfs_to_write = {
+                sg_id: {
+                    'original_vcf': str(sg_vcfs[sg_id]['vcf']),
+                    'reformatted_vcf': str(expected_outputs['vcf']),
+                    'meta': sg_vcfs[sg_id]['meta'],
+                }
+                for sg_id in sg_ids
+                if sg_id in sg_vcfs
+            }
+            write_mapping_to_file(sg_vcfs_to_write, sg_vcfs_file)
+
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
 
 
@@ -170,7 +195,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         """
-        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=sg.dataset.name)
         if sg.id not in sg_vcfs:
             return None
 
@@ -333,7 +358,7 @@ class AnnotateCohortSVsMtFromVcfWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage.stage(required_stages=[AnnotateCohortSVsMtFromVcfWithHail], analysis_type='sv', analysis_keys=['mt'])
+@stage.stage(required_stages=[AnnotateCohortSVsMtFromVcfWithHail])
 class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the MT to be this Dataset only
@@ -368,10 +393,15 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         sg_hash = workflow.get_workflow().output_version
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'svs' / 'mt' / 'checkpoints'
 
+        sg_ids, _ = get_sgs_from_datasets([dataset.name])
+
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs_sv(
+            dataset=dataset.name,
             mt_path=mt_path,
-            sg_ids=dataset.get_sequencing_group_ids(),
+            sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
+            seqr_dataset_type='SV',
+            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -379,12 +409,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=[SubsetSVsMtToDatasetWithHail],
-    analysis_type='es-index',
-    analysis_keys=['done_flag'],
-    update_analysis_meta=lambda x: {'seqr-dataset-type': 'SV'},  # noqa: ARG005
-)
+@stage.stage(required_stages=[SubsetSVsMtToDatasetWithHail])
 class ExportSVsMtToElasticIndex(stage.DatasetStage):
     """
     Create a Seqr index
@@ -435,17 +460,22 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
 
+        sg_ids, _ = get_sgs_from_datasets([dataset.name])
         req_storage = tshirt_mt_sizing(
             sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
-            cohort_size=len(get_sgs_from_datasets([dataset.name])),
+            cohort_size=len(sg_ids),
         )
 
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
+            dataset=dataset.name,
             mt_path=mt_path,
             index_name=index_name,
             flag_name=flag_name,
             req_storage=req_storage,
+            sg_ids=sg_ids,
+            seqr_dataset_type='SV',
+            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
             job_name=f'Export {index_name} from {mt_name}',
             job_attrs=self.get_job_attrs(dataset),
         )

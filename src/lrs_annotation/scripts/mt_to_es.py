@@ -18,6 +18,7 @@ import hail as hl
 from cpg_utils import to_path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
+from cpg_utils.metamist_registration import create_new
 
 # CONSTANTS stolen from https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/elasticsearch_utils.py#L13
 # make encoded values as human-readable as possible
@@ -246,9 +247,13 @@ class ElasticsearchClient:
 
 def main():
     parser = ArgumentParser(description='Argument Parser for the ES generation script')
+    parser.add_argument('--dataset', help='Dataset name', required=True)
     parser.add_argument('--mt_path', help='MT path name', required=True)
     parser.add_argument('--index', help='ES index name', required=True)
-    parser.add_argument('--flag', help='ES index "DONE" file path')
+    parser.add_argument('--flag', help='ES index "DONE" file path', required=True)
+    parser.add_argument('--sg_ids', help='Comma-separated list of SG IDs', required=True)
+    parser.add_argument('--seqr_dataset_type', help='Seqr dataset type', required=True)
+    parser.add_argument('--path_to_input_vcfs_file', help='Path to the input VCFs file', required=True)
     args = parser.parse_args()
 
     password: str | None = read_secret(
@@ -300,6 +305,21 @@ def main():
 
     with to_path(args.flag).open('w') as f:
         f.write('done')
+
+    meta = {
+        'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
+        'seqr-dataset-type': args.seqr_dataset_type,
+    }
+
+    create_new(
+        project=args.dataset,
+        output=str(to_path(args.flag)),
+        analysis_type='es-index',
+        sgs=args.sg_ids.split(','),
+        meta=meta,
+        secondary={'inputs': args.path_to_input_vcfs_file},
+    )
+    logger.info(f'Registered es-index analysis for dataset {args.dataset}')
 
 
 def elasticsearch_row(mt: hl.MatrixTable):

@@ -12,9 +12,12 @@ from lrs_annotation.scripts.snps_indels import annotate_dataset_mt
 
 
 def annotate_dataset_jobs(
+    dataset: str,
     mt_path: Path,
     sg_ids: list[str],
     out_mt_path: Path,
+    seqr_dataset_type: str,
+    input_vcfs_file_path: str,
     tmp_prefix: Path,
     job_attrs: dict[str, str],
 ) -> list[Job]:
@@ -47,8 +50,12 @@ def annotate_dataset_jobs(
     annotate_j.command(
         f"""
         python3 {annotate_dataset_mt.__file__} \\
+            --dataset {dataset} \\
             --mt_path {subset_mt_path} \\
-            --out_mt_path {out_mt_path}
+            --out_mt_path {out_mt_path} \\
+            --sg_ids {','.join(sg_ids)} \\
+            --seqr_dataset_type {seqr_dataset_type} \\
+            --path_to_input_vcfs_file {input_vcfs_file_path}
         """
     )
 
