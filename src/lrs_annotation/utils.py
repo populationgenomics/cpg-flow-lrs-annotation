@@ -103,7 +103,7 @@ def get_sg_vcfs_file_path(workflow_name: str) -> Path:
     dataset = workflow.get_multicohort().analysis_dataset.prefix()
     sg_hash = workflow.get_workflow().output_version
     ar_guid = config_retrieve(['workflow', 'ar-guid'])
-    return dataset / workflow_name / sg_hash / ar_guid / 'input_vcfs.json'
+    return dataset / 'lrs_annotation' / workflow_name / sg_hash / ar_guid / 'input_vcfs.json'
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
