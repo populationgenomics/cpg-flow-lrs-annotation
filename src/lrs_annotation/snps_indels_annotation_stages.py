@@ -30,19 +30,13 @@ from lrs_annotation.utils import (
     get_dataset_names,
     get_family_sequencing_groups,
     get_query_filter_from_config,
+    get_sg_vcfs_file_path,
     joint_calling_scatter_count,
     write_mapping_to_file,
+    write_to_json,
 )
 
-
-@functools.cache
-def get_sg_vcfs_file_path() -> Path:
-    """
-    Get the path to the SG VCFs file for this multicohort
-    """
-    sg_hash = workflow.get_workflow().output_version
-    return get_multicohort().analysis_dataset.prefix() / 'snps_indels' / sg_hash / 'input_vcfs.json'
-
+WORKFLOW_NAME = 'snps_indels'
 
 @stage.stage
 class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
@@ -129,7 +123,7 @@ class ModifyVcf(stage.SequencingGroupStage):
         get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.gz'))
 
         # Write out the VCFs for this multicohort
-        sg_vcfs_file = get_sg_vcfs_file_path()
+        sg_vcfs_file = get_sg_vcfs_file_path(WORKFLOW_NAME)
         if not sg_vcfs_file.exists():
             logger.info(f'Writing input VCFs to {sg_vcfs_file}')
             sg_vcfs_to_write = {
@@ -141,7 +135,7 @@ class ModifyVcf(stage.SequencingGroupStage):
                 for sg_id in sg_ids
                 if sg_id in sg_vcfs
             }
-            write_mapping_to_file(sg_vcfs_to_write, sg_vcfs_file)
+            write_to_json(sg_vcfs_to_write, sg_vcfs_file)
 
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
@@ -424,7 +418,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
             seqr_dataset_type='SNV_INDEL',
-            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
+            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -503,7 +497,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             req_storage=req_storage,
             sg_ids=sg_ids,
             seqr_dataset_type='SNV_INDEL',
-            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
+            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             job_name=f'Export {index_name} from {mt_name}',
             job_attrs=self.get_job_attrs(dataset),
         )

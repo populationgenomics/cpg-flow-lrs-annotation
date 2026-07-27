@@ -3,6 +3,7 @@ Utility methods used across the workflows
 """
 
 import hashlib
+import json
 from enum import Enum
 from functools import cache
 from os.path import join
@@ -11,7 +12,7 @@ from typing import Any
 
 from hailtop.batch.job import BashJob, Job
 
-from cpg_flow import targets
+from cpg_flow import targets, workflow
 from cpg_flow.utils import logger
 from cpg_utils import Path
 from cpg_utils.cloud import read_secret
@@ -91,6 +92,17 @@ def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
     name_suffix = f'{len(family_sg_ids)}_sgs-{len(only_family_ids)}_families-{h}'
 
     return {'family_sg_ids': family_sg_ids, 'name_suffix': name_suffix}
+
+@cache
+def get_sg_vcfs_file_path(workflow_name: str) -> Path:
+    """
+    Get the path to the SG VCFs file for this multicohort
+    Uses the output version + AR GUID to ensure that the file is unique to this run of the workflow
+    """
+    dataset = workflow.get_multicohort().analysis_dataset.prefix()
+    sg_hash = workflow.get_workflow().output_version
+    ar_guid = config_retrieve(['workflow', 'ar-guid'])
+    return dataset / workflow_name / sg_hash / ar_guid / 'input_vcfs.json'
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
@@ -195,6 +207,13 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
         if sequencing_group_count >= threshold:
             return scatter_count
     return 50
+
+def write_to_json(data: dict, output_path: Path) -> None:
+    """
+    Write a dictionary to a JSON file
+    """
+    with output_path.open('w') as f:
+        json.dump(data, f, indent=4)
 
 
 def write_mapping_to_file(mapping: dict, output_path: Path) -> None:

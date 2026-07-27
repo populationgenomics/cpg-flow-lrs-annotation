@@ -30,18 +30,12 @@ from lrs_annotation.utils import (
     es_password,
     get_dataset_names,
     get_query_filter_from_config,
+    get_sg_vcfs_file_path,
     write_mapping_to_file,
+    write_to_json,
 )
 
-
-@functools.cache
-def get_sg_vcfs_file_path() -> Path:
-    """
-    Get the path to the SG VCFs file for this multicohort
-    """
-    sg_hash = workflow.get_workflow().output_version
-    return get_multicohort().analysis_dataset.prefix() / 'svs' / sg_hash / 'input_vcfs.json'
-
+WORKFLOW_NAME = 'svs'
 
 @stage.stage
 class WriteLrsIdToSgAndSexMappingFiles(stage.MultiCohortStage):
@@ -159,7 +153,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
         get_batch().write_output(mod_job.vcf_out, str(expected_outputs['vcf']).removesuffix('.vcf.gz'))
 
         # Write out the VCFs for this multicohort
-        sg_vcfs_file = get_sg_vcfs_file_path()
+        sg_vcfs_file = get_sg_vcfs_file_path(WORKFLOW_NAME)
         if not sg_vcfs_file.exists():
             logger.info(f'Writing input VCFs to {sg_vcfs_file}')
             sg_vcfs_to_write = {
@@ -171,7 +165,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
                 for sg_id in sg_ids
                 if sg_id in sg_vcfs
             }
-            write_mapping_to_file(sg_vcfs_to_write, sg_vcfs_file)
+            write_to_json(sg_vcfs_to_write, sg_vcfs_file)
 
         return self.make_outputs(target=sg, jobs=[mod_job], data=expected_outputs)
 
@@ -401,7 +395,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
             seqr_dataset_type='SV',
-            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
+            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -475,7 +469,7 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
             req_storage=req_storage,
             sg_ids=sg_ids,
             seqr_dataset_type='SV',
-            input_vcfs_file_path=str(get_sg_vcfs_file_path()),
+            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             job_name=f'Export {index_name} from {mt_name}',
             job_attrs=self.get_job_attrs(dataset),
         )
