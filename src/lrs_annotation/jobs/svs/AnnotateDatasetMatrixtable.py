@@ -29,8 +29,6 @@ def annotate_dataset_jobs_sv(
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 
-    all_jobs: list[Job] = []
-
     subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
     subset_j.image(config_retrieve(['workflow', 'driver_image']))
     assert sg_ids
@@ -57,4 +55,6 @@ def annotate_dataset_jobs_sv(
         """
     )
 
-    return all_jobs
+    annotate_j.depends_on(subset_j)
+
+    return [subset_j, annotate_j]
