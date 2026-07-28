@@ -98,12 +98,14 @@ def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
 def get_sg_vcfs_file_path(workflow_name: str) -> Path:
     """
     Get the path to the SG VCFs file for this multicohort
-    Uses the output version + AR GUID to ensure that the file is unique to this run of the workflow
+    Uses the output version + query filters hash to ensure that the file is unique to this combination of
+    input SGs / custom cohorts & query filters.
     """
+    query_filters_str = json.dumps(config_retrieve(['workflow', 'query_filters'], {}), sort_keys=True).encode('utf-8')
+    filters_hash = hashlib.sha256(query_filters_str).hexdigest()[:8]
     dataset = workflow.get_multicohort().analysis_dataset.prefix()
     sg_hash = workflow.get_workflow().output_version
-    ar_guid = config_retrieve(['workflow', 'ar-guid'])
-    return dataset / 'lrs_annotation' / workflow_name / sg_hash / ar_guid / 'input_vcfs.json'
+    return dataset / 'lrs_annotation' / workflow_name / sg_hash / filters_hash / 'input_vcfs.json'
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
