@@ -6,7 +6,6 @@ from google.api_core.exceptions import PermissionDenied
 from loguru import logger
 from utils import (
     es_password,
-    get_dataset_name,
     get_dataset_names,
     get_query_filter_from_config,
     write_mapping_to_file,
@@ -170,7 +169,7 @@ class ReformatSVsVcfWithBcftools(stage.SequencingGroupStage):
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         """
-        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=get_dataset_name(sg.dataset.name))
+        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=sg.dataset.name)
         if sg.id not in sg_vcfs:
             return None
 

@@ -122,8 +122,10 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
         Note: Not every SG will have a VCF, since some may be parents in joint-called families.
         These SGs will still be included in the 'sg_ids' list, but their VCFs will not be present in the 'vcfs' dict.
     """
-    if config_retrieve(['workflow', 'access_level']) == 'test' and not dataset_name.endswith('-test'):
-        dataset_name += '-test'
+
+    # adjust with a -test suffix if appropriate
+    dataset_name = dataset_for_access_level(dataset_name)
+
     query_filters: dict = config_retrieve(['workflow', 'query_filters'], default={})
     if not query_filters:
         raise ValueError('No query filters found in the config file. Please check your configuration.')
