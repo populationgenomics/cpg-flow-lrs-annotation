@@ -39,7 +39,7 @@ def export_mt_to_elasticsearch(
         --mt_path $BATCH_TMPDIR/{mt_name} \\
         --index {index_name} \\
         --flag {flag_name} \\
-        --sg_ids {','.join(sg_ids)} \\
+        --sg_ids {' '.join(sg_ids)} \\
         --seqr_dataset_type {seqr_dataset_type} \\
         --path_to_input_vcfs_file {input_vcfs_file_path}
         """

@@ -52,14 +52,14 @@ def cli_main():
 
     parser = ArgumentParser()
     parser.add_argument('--mt_path', type=str, required=True, help='Path to the input MatrixTable file')
-    parser.add_argument('--sg_ids', type=str, required=True, help='List of sequencing group IDs to subset')
+    parser.add_argument('--sg_ids', nargs='+', required=True, help='List of sequencing group IDs to subset')
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to write the output MatrixTable file')
 
     args = parser.parse_args()
 
     subset_mt_to_sgs(
         mt_path=args.mt_path,
-        sg_ids=args.sg_ids.split(','),
+        sg_ids=args.sg_ids,
         out_mt_path=args.out_mt_path,
     )
 

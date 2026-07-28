@@ -92,7 +92,7 @@ def cli_main():
     parser.add_argument('--dataset', type=str, required=True, help='Name of the dataset')
     parser.add_argument('--mt_path', type=str, required=True, help='Path to the input MatrixTable file')
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to write the output MatrixTable file')
-    parser.add_argument('--sg_ids', type=str, required=True, help='List of sequencing group IDs to subset')
+    parser.add_argument('--sg_ids', nargs='+', required=True, help='List of sequencing group IDs to subset')
     parser.add_argument('--seqr_dataset_type', type=str, required=True, help='Seqr dataset type')
     parser.add_argument('--path_to_input_vcfs_file', type=str, required=True, help='Path to the input VCFs file')
 
@@ -112,7 +112,7 @@ def cli_main():
         project=args.dataset,
         output=args.out_mt_path,
         analysis_type='matrixtable',
-        sgs=args.sg_ids.split(','),
+        sgs=args.sg_ids,
         meta=meta,
         secondary={'inputs': args.path_to_input_vcfs_file},
     )
