@@ -313,7 +313,7 @@ def main():
 
     create_new(
         project=args.dataset,
-        output=str(to_path(args.flag)),
+        output=args.flag,
         analysis_type='es-index',
         sgs=args.sg_ids.split(','),
         meta=meta,
