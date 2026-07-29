@@ -1,8 +1,10 @@
 from argparse import ArgumentParser
 
-import hail as hl
-from cpg_utils.hail_batch import genome_build, init_batch
 from loguru import logger
+
+import hail as hl
+
+from cpg_utils.hail_batch import genome_build, init_batch
 
 from lrs_annotation.utils import get_init_batch_args_for_job
 

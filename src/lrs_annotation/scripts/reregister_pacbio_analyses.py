@@ -1,7 +1,8 @@
 import argparse
 
-from cpg_utils import to_path
 from loguru import logger
+
+from cpg_utils import to_path
 from metamist.apis import AnalysisApi
 from metamist.graphql import gql, query
 from metamist.models import Analysis, AnalysisStatus, AnalysisUpdateModel

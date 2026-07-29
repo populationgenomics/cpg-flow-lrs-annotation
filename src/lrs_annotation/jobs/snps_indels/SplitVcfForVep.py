@@ -1,10 +1,11 @@
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import can_reuse, dependency_handler
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
-from hailtop.batch.job import Job
 
 from lrs_annotation.utils import get_intervals_from_bed, get_resource_overrides_for_job
 

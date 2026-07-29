@@ -24,6 +24,7 @@ avoid relying on them downstream
 from argparse import ArgumentParser
 
 import hail as hl
+
 from cpg_utils.hail_batch import init_batch
 
 from lrs_annotation.utils import get_init_batch_args_for_job

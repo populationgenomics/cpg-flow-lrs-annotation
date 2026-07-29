@@ -11,11 +11,13 @@ from argparse import ArgumentParser
 from io import StringIO
 
 import elasticsearch
+from loguru import logger
+
 import hail as hl
+
 from cpg_utils import to_path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
-from loguru import logger
 
 # CONSTANTS stolen from https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/elasticsearch_utils.py#L13
 # make encoded values as human-readable as possible
