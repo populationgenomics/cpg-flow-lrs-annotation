@@ -1,5 +1,8 @@
+from loguru import logger
+
 from hailtop.batch.job import Job
 
+from cpg_flow.utils import can_reuse
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
@@ -36,7 +39,7 @@ def annotate_dataset_jobs_sv(
         f"""
         python3 {subset_mt_to_sgs.__file__} \\
             --mt_path {mt_path} \\
-            --sg_ids {','.join(sg_ids)} \\
+            --sg_ids {' '.join(sg_ids)} \\
             --out_mt_path {subset_mt_path}
         """
     )
@@ -54,6 +57,11 @@ def annotate_dataset_jobs_sv(
             --path_to_input_vcfs_file {input_vcfs_file_path}
         """
     )
+
+    if can_reuse(subset_mt_path / '_SUCCESS'):
+        logger.info(f'Skipping subset job since {subset_mt_path / "_SUCCESS"} exists and can be reused')
+        logger.info('To disable this, set workflow.check_intermediates to False in the config')
+        return [annotate_j]
 
     annotate_j.depends_on(subset_j)
 
