@@ -1,6 +1,7 @@
 [workflow]
 
 gatk_sv_commit = '890582922bccb4b651275506a34311c949417f6c'
+import_vcf_min_partitions = 50
 
 [references]
 ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
