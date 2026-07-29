@@ -307,6 +307,7 @@ def main():
         f.write('done')
 
     meta = {
+        'stage': 'ExportSnpsIndelsMtToESIndex' if 'SNPsIndels' in args.index else 'ExportSVsMtToElasticIndex',
         'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
         'seqr-dataset-type': args.seqr_dataset_type,
     }

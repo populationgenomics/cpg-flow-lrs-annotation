@@ -181,7 +181,7 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=merge_job)
 
 
-@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools], analysis_keys=['mt'], analysis_type='matrixtable')
+@stage.stage(required_stages=[ModifyVcf, MergeVcfsWithBcftools])
 class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
     """
     Writes the merged VCF to a matrix table at the dataset level, without any annotation.
@@ -220,9 +220,15 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
         else:
             vcf_path = inputs.as_path(mc, MergeVcfsWithBcftools, 'vcf')
 
+        sg_ids, _ = get_sgs_from_datasets([dataset.name])
+
         outputs = self.expected_outputs(dataset)
 
         job = VcfToUnannotatedMt.vcf_to_unannotated_mt_job(
+            dataset=dataset_for_access_level(dataset.name),
+            sg_ids=sg_ids,
+            seqr_dataset_type='SNV_INDEL',
+            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
             job_attrs=self.get_job_attrs(dataset),

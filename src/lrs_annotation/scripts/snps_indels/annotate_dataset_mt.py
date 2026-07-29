@@ -126,6 +126,7 @@ def cli_main():
     )
 
     meta = {
+        'stage': 'SubsetMtToDatasetWithHail',
         'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
         'seqr-dataset-type': args.seqr_dataset_type,
     }
