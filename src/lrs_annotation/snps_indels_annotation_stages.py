@@ -9,7 +9,7 @@ from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve
+from cpg_utils.config import config_retrieve, dataset_for_access_level
 from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
@@ -412,7 +412,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
-            dataset=dataset.name,
+            dataset=dataset_for_access_level(dataset.name),
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
@@ -489,7 +489,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
         # set all job attributes in one bash
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
-            dataset=dataset.name,
+            dataset=dataset_for_access_level(dataset.name),
             mt_path=mt_path,
             index_name=index_name,
             flag_name=flag_name,

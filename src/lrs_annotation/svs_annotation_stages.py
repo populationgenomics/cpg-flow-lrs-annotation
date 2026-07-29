@@ -9,7 +9,7 @@ from cpg_flow import stage, targets, workflow
 from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 from cpg_utils import Path, to_path
-from cpg_utils.config import AR_GUID_NAME, config_retrieve, try_get_ar_guid
+from cpg_utils.config import AR_GUID_NAME, config_retrieve, dataset_for_access_level, try_get_ar_guid
 from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
@@ -389,7 +389,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         sg_ids, _ = get_sgs_from_datasets([dataset.name])
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs_sv(
-            dataset=dataset.name,
+            dataset=dataset_for_access_level(dataset.name),
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
@@ -461,7 +461,7 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
 
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
-            dataset=dataset.name,
+            dataset=dataset_for_access_level(dataset.name),
             mt_path=mt_path,
             index_name=index_name,
             flag_name=flag_name,
