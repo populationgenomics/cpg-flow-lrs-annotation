@@ -40,9 +40,9 @@ def cli_main():
     parser = ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True, help='Name of the dataset')
     parser.add_argument('--sg_ids', nargs='+', required=True, help='List of sequencing group IDs to subset')
-    parser.add_argument('--path_to_input_vcfs_file', type=str, required=True, help='Path to the input VCFs file')
     parser.add_argument('--vcf_path', type=str, required=True, help='Path to the input VCF file')
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to the output Matrix Table file')
+    parser.add_argument('--path_to_input_vcfs_file', type=str, required=True, help='Path to the input VCFs file')
     args = parser.parse_args()
 
     vcf_to_unannotated_mt(

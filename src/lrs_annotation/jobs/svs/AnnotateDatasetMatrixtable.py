@@ -16,7 +16,7 @@ def annotate_dataset_jobs_sv(
     mt_path: Path,
     sg_ids: list[str],
     out_mt_path: Path,
-    input_vcfs_file_path: str,
+    input_vcfs_file_path: Path,
     tmp_prefix: Path,
     job_attrs: dict[str, str],
 ) -> list[Job]:
@@ -37,9 +37,9 @@ def annotate_dataset_jobs_sv(
     subset_j.command(
         f"""
         python3 {subset_mt_to_sgs.__file__} \\
-            --mt_path {mt_path} \\
+            --mt_path {mt_path!s} \\
             --sg_ids {' '.join(sg_ids)} \\
-            --out_mt_path {subset_mt_path}
+            --out_mt_path {subset_mt_path!s}
         """
     )
 
@@ -49,10 +49,10 @@ def annotate_dataset_jobs_sv(
         f"""
         python3 {annotate_dataset_mt.__file__} \\
             --dataset {dataset} \\
-            --mt_path {subset_mt_path} \\
-            --out_mt_path {out_mt_path} \\
             --sg_ids {' '.join(sg_ids)} \\
-            --path_to_input_vcfs_file {input_vcfs_file_path}
+            --mt_path {subset_mt_path!s} \\
+            --out_mt_path {out_mt_path!s} \\
+            --path_to_input_vcfs_file {input_vcfs_file_path!s}
         """
     )
 

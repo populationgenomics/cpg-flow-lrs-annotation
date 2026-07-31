@@ -263,10 +263,10 @@ class ElasticsearchClient:
 def main():
     parser = ArgumentParser(description='Argument Parser for the ES generation script')
     parser.add_argument('--dataset', help='Dataset name', required=True)
+    parser.add_argument('--sg_ids', nargs='+', help='Whitespace-separated list of SG IDs', required=True)
     parser.add_argument('--mt_path', help='MT path name', required=True)
     parser.add_argument('--index', help='ES index name', required=True)
-    parser.add_argument('--done-flag', help='ES index "DONE" file path', required=True)
-    parser.add_argument('--sg_ids', nargs='+', help='Whitespace-separated list of SG IDs', required=True)
+    parser.add_argument('--done_flag', help='ES index "DONE" file path', required=True)
     parser.add_argument('--path_to_input_vcfs_file', help='Path to the input VCFs file', required=True)
     args = parser.parse_args()
 

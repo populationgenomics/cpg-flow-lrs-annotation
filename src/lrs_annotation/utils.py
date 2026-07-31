@@ -95,12 +95,15 @@ def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
 
 
 @cache
-def get_sg_vcfs_file_path(workflow_name: str) -> Path:
+def get_sg_vcfs_file_path() -> Path:
     """
     Get the path to the SG VCFs file for this multicohort
     Uses the output version + query filters hash to ensure that the file is unique to this combination of
     input SGs / custom cohorts & query filters.
     """
+    workflow_name = config_retrieve(['workflow', 'name'], None)
+    if not workflow_name:
+        raise ValueError('workflow.name must be set in the config to get the SG VCFs file path.')
     query_filters_str = json.dumps(config_retrieve(['workflow', 'query_filters'], {}), sort_keys=True).encode('utf-8')
     filters_hash = hashlib.sha256(query_filters_str).hexdigest()[:8]
     dataset = workflow.get_multicohort().analysis_dataset.prefix()

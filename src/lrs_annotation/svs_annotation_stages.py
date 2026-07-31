@@ -6,7 +6,6 @@ from google.api_core.exceptions import PermissionDenied
 from loguru import logger
 
 from cpg_flow import stage, targets, workflow
-from cpg_flow.utils import tshirt_mt_sizing
 from cpg_flow.workflow import get_multicohort
 from cpg_utils import Path, to_path
 from cpg_utils.config import AR_GUID_NAME, config_retrieve, dataset_for_access_level, try_get_ar_guid
@@ -32,8 +31,6 @@ from lrs_annotation.utils import (
     write_mapping_to_file,
     write_to_json,
 )
-
-WORKFLOW_NAME = 'svs'
 
 
 @stage.stage
@@ -152,7 +149,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
         get_batch().write_output(mod_job.vcf_out, str(expected_outputs['vcf']).removesuffix('.vcf.gz'))
 
         # Write out the VCFs for this multicohort
-        sg_vcfs_file = get_sg_vcfs_file_path(WORKFLOW_NAME)
+        sg_vcfs_file = get_sg_vcfs_file_path()
         if not sg_vcfs_file.exists():
             logger.info(f'Writing input VCFs to {sg_vcfs_file}')
             sg_vcfs_to_write = {
@@ -393,7 +390,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
-            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
+            input_vcfs_file_path=get_sg_vcfs_file_path(),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -449,25 +446,17 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         # get the expected outputs as Strings
         index_name = str(outputs['index_name'])
         done_flag = str(outputs['done_flag'])
-        # and just the name, used after localisation
-        mt_name = mt_path.split('/')[-1]
 
         sg_ids, _ = get_sgs_from_datasets([dataset.name])
-        req_storage = tshirt_mt_sizing(
-            sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
-            cohort_size=len(sg_ids),
-        )
 
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
             dataset=dataset_for_access_level(dataset.name),
+            sg_ids=sg_ids,
             mt_path=mt_path,
             index_name=index_name,
             done_flag=done_flag,
-            req_storage=req_storage,
-            sg_ids=sg_ids,
-            input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
-            job_name=f'Export {index_name} from {mt_name}',
+            input_vcfs_file_path=get_sg_vcfs_file_path(),
             job_attrs=self.get_job_attrs(dataset),
         )
 

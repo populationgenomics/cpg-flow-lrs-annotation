@@ -1,5 +1,6 @@
 [workflow]
 
+name = 'snps_indels_annotation'
 seqr_dataset_type='SNV_INDEL'
 import_vcf_min_partitions = 50
 
