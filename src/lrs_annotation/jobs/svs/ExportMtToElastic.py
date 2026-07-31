@@ -9,7 +9,7 @@ def export_svs_mt_to_elasticsearch(
     batch: Batch,
     mt_path: str,
     index_name: str,
-    flag_name: str,
+    done_flag: str,
     req_storage: str,
     job_name: str,
     job_attrs: dict | None = None,
@@ -32,7 +32,7 @@ def export_svs_mt_to_elasticsearch(
         python3 {mt_to_es.__file__} \\
         --mt_path $BATCH_TMPDIR/{mt_name} \\
         --index {index_name} \\
-        --flag {flag_name}
+        --done-flag {done_flag}
         """
     )
 

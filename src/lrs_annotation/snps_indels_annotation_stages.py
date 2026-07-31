@@ -478,7 +478,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
 
         # get the expected outputs as Strings
         index_name = outputs['index_name']
-        flag_name = str(outputs['done_flag'])
+        done_flag = str(outputs['done_flag'])
         # and just the name, used after localisation
         mt_name = mt_path.split('/')[-1]
 
@@ -496,7 +496,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             dataset=dataset_for_access_level(dataset.name),
             mt_path=mt_path,
             index_name=index_name,
-            flag_name=flag_name,
+            done_flag=done_flag,
             req_storage=req_storage,
             sg_ids=sg_ids,
             input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),

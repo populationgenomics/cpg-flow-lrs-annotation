@@ -10,7 +10,7 @@ def export_mt_to_elasticsearch(
     dataset: str,
     mt_path: str,
     index_name: str,
-    flag_name: str,
+    done_flag: str,
     req_storage: int,
     sg_ids: list[str],
     input_vcfs_file_path: str,
@@ -37,7 +37,7 @@ def export_mt_to_elasticsearch(
         --dataset {dataset} \\
         --mt_path $BATCH_TMPDIR/{mt_name} \\
         --index {index_name} \\
-        --flag {flag_name} \\
+        --done-flag {done_flag} \\
         --sg_ids {' '.join(sg_ids)} \\
         --path_to_input_vcfs_file {input_vcfs_file_path}
         """
