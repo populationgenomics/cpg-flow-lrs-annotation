@@ -1,6 +1,8 @@
+from loguru import logger
+
 from hailtop.batch.job import Job
 
-from cpg_flow.utils import dependency_handler
+from cpg_flow.utils import can_reuse
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import get_batch
@@ -10,9 +12,11 @@ from lrs_annotation.scripts.svs import annotate_dataset_mt
 
 
 def annotate_dataset_jobs_sv(
-    mt_path: Path,
+    dataset: str,
     sg_ids: list[str],
+    mt_path: Path,
     out_mt_path: Path,
+    input_vcfs_file_path: Path,
     tmp_prefix: Path,
     job_attrs: dict[str, str],
 ) -> list[Job]:
@@ -27,31 +31,36 @@ def annotate_dataset_jobs_sv(
 
     subset_mt_path = tmp_prefix / 'cohort-subset.mt'
 
-    all_jobs: list[Job] = []
-
     subset_j = get_batch().new_job('Subset cohort to dataset', (job_attrs or {}) | {'tool': 'hail query'})
     subset_j.image(config_retrieve(['workflow', 'driver_image']))
     assert sg_ids
     subset_j.command(
         f"""
         python3 {subset_mt_to_sgs.__file__} \\
-            --mt_path {mt_path} \\
-            --sg_ids {','.join(sg_ids)} \\
-            --out_mt_path {subset_mt_path}
+            --mt_path {mt_path!s} \\
+            --sg_ids {' '.join(sg_ids)} \\
+            --out_mt_path {subset_mt_path!s}
         """
     )
 
-    dependency_handler(subset_j, all_jobs)
-
-    annotate_j = get_batch().new_job('Annotate dataset', job_attrs | {'tool': 'hail query'})
+    annotate_j = get_batch().new_job('Annotate dataset', (job_attrs or {}) | {'tool': 'hail query'})
     annotate_j.image(config_retrieve(['workflow', 'driver_image']))
     annotate_j.command(
         f"""
         python3 {annotate_dataset_mt.__file__} \\
-            --mt_path {subset_mt_path} \\
-            --out_mt_path {out_mt_path}
+            --dataset {dataset} \\
+            --sg_ids {' '.join(sg_ids)} \\
+            --mt_path {subset_mt_path!s} \\
+            --out_mt_path {out_mt_path!s} \\
+            --path_to_input_vcfs_file {input_vcfs_file_path!s}
         """
     )
-    dependency_handler(annotate_j, all_jobs)
 
-    return all_jobs
+    if can_reuse(subset_mt_path / '_SUCCESS'):
+        logger.info(f'Skipping subset job since {subset_mt_path / "_SUCCESS"} exists and can be reused')
+        logger.info('To disable this, set workflow.check_intermediates to False in the config')
+        return [annotate_j]
+
+    annotate_j.depends_on(subset_j)
+
+    return [subset_j, annotate_j]

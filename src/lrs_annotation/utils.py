@@ -3,6 +3,7 @@ Utility methods used across the workflows
 """
 
 import hashlib
+import json
 from enum import Enum
 from functools import cache
 from os.path import join
@@ -11,7 +12,7 @@ from typing import Any
 
 from hailtop.batch.job import BashJob, Job
 
-from cpg_flow import targets
+from cpg_flow import targets, workflow
 from cpg_flow.utils import logger
 from cpg_utils import Path
 from cpg_utils.cloud import read_secret
@@ -91,6 +92,23 @@ def get_family_sequencing_groups(dataset: targets.Dataset) -> dict | None:
     name_suffix = f'{len(family_sg_ids)}_sgs-{len(only_family_ids)}_families-{h}'
 
     return {'family_sg_ids': family_sg_ids, 'name_suffix': name_suffix}
+
+
+@cache
+def get_sg_vcfs_file_path() -> Path:
+    """
+    Get the path to the SG VCFs file for this multicohort
+    Uses the output version + query filters hash to ensure that the file is unique to this combination of
+    input SGs / custom cohorts & query filters.
+    """
+    workflow_name = config_retrieve(['workflow', 'name'], None)
+    if not workflow_name:
+        raise ValueError('workflow.name must be set in the config to get the SG VCFs file path.')
+    query_filters_str = json.dumps(config_retrieve(['workflow', 'query_filters'], {}), sort_keys=True).encode('utf-8')
+    filters_hash = hashlib.sha256(query_filters_str).hexdigest()[:8]
+    dataset = workflow.get_multicohort().analysis_dataset.prefix()
+    sg_hash = workflow.get_workflow().output_version
+    return dataset / 'lrs_annotation' / workflow_name / sg_hash / filters_hash / 'input_vcfs.json'
 
 
 def get_resource_overrides_for_job(job: BashJob, job_key: str) -> BashJob:
@@ -197,7 +215,15 @@ def joint_calling_scatter_count(sequencing_group_count: int) -> int:
     return 50
 
 
-def write_mapping_to_file(mapping: dict[str, str], output_path: Path) -> None:
+def write_to_json(data: dict, output_path: Path) -> None:
+    """
+    Write a dictionary to a JSON file
+    """
+    with output_path.open('w') as f:
+        json.dump(data, f, indent=4)
+
+
+def write_mapping_to_file(mapping: dict, output_path: Path) -> None:
     """
     Write a mapping to a file
     """

@@ -115,15 +115,14 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
         dataset_name (str): the name of the dataset
 
     Returns:
-        'vcfs': dict[str, dict]
-            A dictionary of sequencing group IDs and their corresponding VCFs and metadata.
         'sg_ids': list[str]
             A list of sequencing group IDs that are present in the workflow run.
+        'vcfs': dict[str, dict]
+            A dictionary of sequencing group IDs and their corresponding VCFs and metadata.
         Note: Not every SG will have a VCF, since some may be parents in joint-called families.
         These SGs will still be included in the 'sg_ids' list, but their VCFs will not be present in the 'vcfs' dict.
     """
-    if config_retrieve(['workflow', 'access_level']) == 'test' and not dataset_name.endswith('-test'):
-        dataset_name += '-test'
+    dataset_name = dataset_for_access_level(dataset_name)
     query_filters: dict = config_retrieve(['workflow', 'query_filters'], default={})
     if not query_filters:
         raise ValueError('No query filters found in the config file. Please check your configuration.')
@@ -166,7 +165,7 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     for sg in single_sample_vcfs_query_results['project']['sequencingGroups']:
         for analysis in sg['analyses']:
             single_sample_vcfs[sg['id']] = {
-                'vcf': analysis['output'],
+                'vcf': analysis['outputs']['path'],
                 'meta': analysis['meta'],
             }
     if verbose:
@@ -200,7 +199,7 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     for sg in joint_called_vcfs_query_results['project']['sequencingGroups']:
         for analysis in sg['analyses']:
             joint_called_vcfs[sg['id']] = {
-                'vcf': analysis['output'],
+                'vcf': analysis['outputs']['path'],
                 'meta': analysis['meta'],
             }
 

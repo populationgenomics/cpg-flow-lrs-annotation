@@ -39,6 +39,7 @@ def annotate_cohort(
         skip_invalid_loci=True,
         force_bgz=True,
         array_elements_required=False,
+        min_partitions=config_retrieve(['workflow', 'import_vcf_min_partitions'], 50),
     )
     mt.checkpoint(output=str(checkpoint_prefix) + 'mt-imported.mt', overwrite=True)
     logger.info(f'Imported VCF {vcf_path} as {mt.n_partitions()} partitions')
