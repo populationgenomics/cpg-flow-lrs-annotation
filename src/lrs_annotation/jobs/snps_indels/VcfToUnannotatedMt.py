@@ -10,7 +10,6 @@ from lrs_annotation.scripts.snps_indels import vcf_to_unannotated_mt
 def vcf_to_unannotated_mt_job(
     dataset: str,
     sg_ids: list[str],
-    seqr_dataset_type: str,
     input_vcfs_file_path: str,
     vcf_path: Path,
     out_mt_path: Path,
@@ -26,7 +25,6 @@ def vcf_to_unannotated_mt_job(
         python3 {vcf_to_unannotated_mt.__file__} \\
             --dataset {dataset} \\
             --sg_ids {' '.join(sg_ids)} \\
-            --seqr_dataset_type {seqr_dataset_type} \\
             --path_to_input_vcfs_file {input_vcfs_file_path} \\
             --vcf_path {vcf_path} \\
             --out_mt_path {out_mt_path}

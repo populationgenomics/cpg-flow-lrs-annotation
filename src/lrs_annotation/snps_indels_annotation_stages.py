@@ -227,7 +227,6 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
         job = VcfToUnannotatedMt.vcf_to_unannotated_mt_job(
             dataset=dataset_for_access_level(dataset.name),
             sg_ids=sg_ids,
-            seqr_dataset_type='SNV_INDEL',
             input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
@@ -422,7 +421,6 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             mt_path=mt_path,
             sg_ids=sg_ids,
             out_mt_path=outputs['mt'],
-            seqr_dataset_type='SNV_INDEL',
             input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
@@ -501,7 +499,6 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             flag_name=flag_name,
             req_storage=req_storage,
             sg_ids=sg_ids,
-            seqr_dataset_type='SNV_INDEL',
             input_vcfs_file_path=str(get_sg_vcfs_file_path(WORKFLOW_NAME)),
             job_name=f'Export {index_name} from {mt_name}',
             job_attrs=self.get_job_attrs(dataset),

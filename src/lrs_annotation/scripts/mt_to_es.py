@@ -267,7 +267,6 @@ def main():
     parser.add_argument('--index', help='ES index name', required=True)
     parser.add_argument('--flag', help='ES index "DONE" file path', required=True)
     parser.add_argument('--sg_ids', nargs='+', help='Whitespace-separated list of SG IDs', required=True)
-    parser.add_argument('--seqr_dataset_type', help='Seqr dataset type', required=True)
     parser.add_argument('--path_to_input_vcfs_file', help='Path to the input VCFs file', required=True)
     args = parser.parse_args()
 
@@ -321,10 +320,11 @@ def main():
     with to_path(args.flag).open('w') as f:
         f.write('done')
 
+    seqr_dataset_type = config_retrieve(['workflow', 'seqr_dataset_type'], 'SNV_INDEL')
     meta = {
-        'stage': 'ExportSnpsIndelsMtToESIndex' if 'SNPsIndels' in args.index else 'ExportSVsMtToElasticIndex',
+        'stage': 'ExportSnpsIndelsMtToESIndex' if seqr_dataset_type == 'SNV_INDEL' else 'ExportSVsMtToElasticIndex',
         'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
-        'seqr-dataset-type': args.seqr_dataset_type,
+        'seqr-dataset-type': seqr_dataset_type,
     }
 
     create_new(

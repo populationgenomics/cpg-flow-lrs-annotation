@@ -16,7 +16,6 @@ def annotate_dataset_jobs(
     mt_path: Path,
     sg_ids: list[str],
     out_mt_path: Path,
-    seqr_dataset_type: str,
     input_vcfs_file_path: str,
     tmp_prefix: Path,
     job_attrs: dict[str, str],
@@ -54,7 +53,6 @@ def annotate_dataset_jobs(
             --mt_path {subset_mt_path} \\
             --out_mt_path {out_mt_path} \\
             --sg_ids {' '.join(sg_ids)} \\
-            --seqr_dataset_type {seqr_dataset_type} \\
             --path_to_input_vcfs_file {input_vcfs_file_path}
         """
     )

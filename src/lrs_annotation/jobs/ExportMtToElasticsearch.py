@@ -13,7 +13,6 @@ def export_mt_to_elasticsearch(
     flag_name: str,
     req_storage: int,
     sg_ids: list[str],
-    seqr_dataset_type: str,
     input_vcfs_file_path: str,
     job_name: str,
     job_attrs: dict[str, str],
@@ -40,7 +39,6 @@ def export_mt_to_elasticsearch(
         --index {index_name} \\
         --flag {flag_name} \\
         --sg_ids {' '.join(sg_ids)} \\
-        --seqr_dataset_type {seqr_dataset_type} \\
         --path_to_input_vcfs_file {input_vcfs_file_path}
         """
     )

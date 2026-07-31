@@ -1,4 +1,6 @@
 [workflow]
+
+seqr_dataset_type='SV'
 name = 'svs_annotation'
 
 # update this when cpg_workflows.scripts.get_gencode_gtf.sh is re-run
