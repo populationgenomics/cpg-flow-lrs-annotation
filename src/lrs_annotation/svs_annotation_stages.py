@@ -100,9 +100,17 @@ class ModifySVsVcf(stage.SequencingGroupStage):
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'svs' / 'modified_vcfs'
+        """
+        The modified VCFs and indexes are written to temp storage with the same filename as the original VCF
+        """
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'reformatted_vcfs' / 'svs'
+        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=sequencing_group.dataset.name)
+        if sequencing_group.id not in sg_vcfs:
+            return {}
+        vcf_filename = to_path(sg_vcfs[sequencing_group.id]['vcf']).name.replace('.vcf.gz', '_reformatted.vcf.gz')
         return {
-            'vcf': sgid_prefix / f'{sequencing_group.id}_modified.vcf.gz',
+            'vcf': sgid_prefix / f'{vcf_filename}',
+            'index': sgid_prefix / (vcf_filename + '.tbi'),
         }
 
     def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
