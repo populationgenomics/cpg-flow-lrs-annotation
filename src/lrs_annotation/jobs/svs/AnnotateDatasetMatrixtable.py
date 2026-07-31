@@ -13,8 +13,8 @@ from lrs_annotation.scripts.svs import annotate_dataset_mt
 
 def annotate_dataset_jobs_sv(
     dataset: str,
-    mt_path: Path,
     sg_ids: list[str],
+    mt_path: Path,
     out_mt_path: Path,
     input_vcfs_file_path: Path,
     tmp_prefix: Path,

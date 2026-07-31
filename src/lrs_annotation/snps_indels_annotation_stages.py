@@ -422,8 +422,8 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
             dataset=dataset_for_access_level(dataset.name),
-            mt_path=mt_path,
             sg_ids=sg_ids,
+            mt_path=mt_path,
             out_mt_path=outputs['mt'],
             input_vcfs_file_path=get_sg_vcfs_file_path(),
             tmp_prefix=checkpoint_prefix,
