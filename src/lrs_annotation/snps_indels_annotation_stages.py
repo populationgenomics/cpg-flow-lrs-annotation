@@ -33,8 +33,6 @@ from lrs_annotation.utils import (
     write_to_json,
 )
 
-WORKFLOW_NAME = 'snps_indels'
-
 
 @stage.stage
 class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
