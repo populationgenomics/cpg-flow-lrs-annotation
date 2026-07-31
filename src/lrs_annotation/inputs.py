@@ -165,7 +165,7 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     for sg in single_sample_vcfs_query_results['project']['sequencingGroups']:
         for analysis in sg['analyses']:
             single_sample_vcfs[sg['id']] = {
-                'vcf': analysis['output'],
+                'vcf': analysis['outputs']['path'],
                 'meta': analysis['meta'],
             }
     if verbose:
@@ -199,7 +199,7 @@ def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     for sg in joint_called_vcfs_query_results['project']['sequencingGroups']:
         for analysis in sg['analyses']:
             joint_called_vcfs[sg['id']] = {
-                'vcf': analysis['output'],
+                'vcf': analysis['outputs']['path'],
                 'meta': analysis['meta'],
             }
 
