@@ -317,7 +317,7 @@ def main():
     if es_shards < shard_threshold:
         es_client.wait_for_shard_transfer(args.index)
 
-    with to_path(args.flag).open('w') as f:
+    with to_path(args.done_flag).open('w') as f:
         f.write('done')
 
     seqr_dataset_type = config_retrieve(['workflow', 'seqr_dataset_type'], 'SNV_INDEL')
@@ -329,7 +329,7 @@ def main():
 
     create_new(
         project=args.dataset,
-        output=args.flag,
+        output=args.done_flag,
         analysis_type='es-index',
         sgs=args.sg_ids,
         meta=meta,
