@@ -44,14 +44,15 @@ class ConvertBamToCram(stage.SequencingGroupStage):
         Using the existing `bam_to_cram` function from the `jobs` module.
         """
         input_bam = get_batch().read_input_group(bam=str(sg.alignment_input))
+        outputs = self.expected_outputs(sg)
         job = BamToCram.bam_to_cram(
             b=get_batch(),
             input_bam=input_bam,
+            outputs=outputs,
             job_attrs=self.get_job_attrs(sg),
         )
-        get_batch().write_output(job.sorted_cram, str(self.expected_outputs(sg)['cram']).removesuffix('.cram'))
 
-        return self.make_outputs(sg, data=self.expected_outputs(sg), jobs=[job])
+        return self.make_outputs(sg, data=outputs, jobs=[job])
 
 
 @stage.stage(required_stages=[ConvertBamToCram])
