@@ -167,7 +167,7 @@ class ModifySVsVcf(stage.SequencingGroupStage):
                     'meta': sg_vcfs[sg_id]['meta'],
                 }
                 for sg_id in sg_ids
-                if sg_id in sg_vcfs
+                if sg_id in sg_vcfs and sg_id in get_multicohort().get_sequencing_group_ids()
             }
             write_to_json(sg_vcfs_to_write, sg_vcfs_file)
 
