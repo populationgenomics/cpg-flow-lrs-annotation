@@ -57,5 +57,5 @@ def bam_to_cram(
     """
     j.command(command(cmd, monitor_space=True))
 
-    b.write_output(j.sorted_cram, outputs['cram'].removesuffix('.cram'))
+    b.write_output(j.sorted_cram, str(outputs['cram']).removesuffix('.cram'))
     return j
