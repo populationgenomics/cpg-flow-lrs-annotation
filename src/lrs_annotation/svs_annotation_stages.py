@@ -392,6 +392,7 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'svs' / 'mt' / 'checkpoints'
 
         sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs_sv(
             dataset=dataset_for_access_level(dataset.name),
@@ -456,6 +457,7 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         done_flag = str(outputs['done_flag'])
 
         sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
