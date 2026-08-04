@@ -105,6 +105,7 @@ def cli_main():
     meta = {
         'stage': 'SubsetSVsMtToDatasetWithHail',
         'sequencing_type': config_retrieve(['workflow', 'sequencing_type'], 'genome'),
+        'sequencing_technology': config_retrieve(['workflow', 'sequencing_technology'], 'long-read'),
         'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
         'seqr-dataset-type': config_retrieve(['workflow', 'seqr_dataset_type'], 'SV'),
         'input_vcfs': args.path_to_input_vcfs_file,
