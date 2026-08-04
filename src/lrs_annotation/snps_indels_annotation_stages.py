@@ -136,7 +136,7 @@ class ModifyVcf(stage.SequencingGroupStage):
                     'meta': sg_vcfs[sg_id]['meta'],
                 }
                 for sg_id in sg_ids
-                if sg_id in sg_vcfs
+                if sg_id in sg_vcfs and sg_id in get_multicohort().get_sequencing_group_ids()
             }
             write_to_json(sg_vcfs_to_write, sg_vcfs_file)
 
@@ -412,6 +412,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
             sg_ids = family_sgs['family_sg_ids']
         else:
             sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
@@ -488,6 +489,7 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
             sg_ids = family_sgs['family_sg_ids']
         else:
             sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         # set all job attributes in one bash
         job = export_mt_to_elasticsearch(
