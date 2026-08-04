@@ -324,6 +324,7 @@ def main():
     meta = {
         'stage': 'ExportSnpsIndelsMtToESIndex' if seqr_dataset_type == 'SNV_INDEL' else 'ExportSVsMtToElasticIndex',
         'sequencing_type': config_retrieve(['workflow', 'sequencing_type'], 'genome'),
+        'sequencing_technology': config_retrieve(['workflow', 'sequencing_technology'], 'long-read'),
         'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
         'seqr-dataset-type': seqr_dataset_type,
         'input_vcfs': args.path_to_input_vcfs_file,

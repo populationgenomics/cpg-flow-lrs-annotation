@@ -12,6 +12,7 @@ verbose = false
 # mandatory fields for cpg-flow
 input_cohorts = []
 sequencing_type = 'genome'
+sequencing_technology = 'long-read'
 
 ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta'
 
