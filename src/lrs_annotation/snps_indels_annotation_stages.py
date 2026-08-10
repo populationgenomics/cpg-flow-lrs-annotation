@@ -130,13 +130,13 @@ class ModifyVcf(stage.SequencingGroupStage):
         if not sg_vcfs_file.exists():
             logger.info(f'Writing input VCFs to {sg_vcfs_file}')
             sg_vcfs_to_write = {
-                sg_id: {
-                    'original_vcf': str(sg_vcfs[sg_id]['vcf']),
-                    'reformatted_vcf': str(outputs['vcf']),
-                    'meta': sg_vcfs[sg_id]['meta'],
+                sg.id: {
+                    'original_vcf': str(sg_vcfs[sg.id]['vcf']),
+                    'reformatted_vcf': str(self.expected_outputs(sg)['vcf']),
+                    'meta': sg_vcfs[sg.id]['meta'],
                 }
-                for sg_id in sg_ids
-                if sg_id in sg_vcfs and sg_id in get_multicohort().get_sequencing_group_ids()
+                for sg in get_multicohort().get_sequencing_groups()
+                if sg.id in sg_vcfs
             }
             write_to_json(sg_vcfs_to_write, sg_vcfs_file)
 
