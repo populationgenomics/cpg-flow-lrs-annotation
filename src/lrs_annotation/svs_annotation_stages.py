@@ -13,6 +13,7 @@ from cpg_utils.hail_batch import get_batch
 
 from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
+from lrs_annotation.jobs.LongTRReport import longtr_pathogenic_report
 from lrs_annotation.jobs.svs import (
     AnnotateCohortMatrixtable,
     AnnotateDatasetMatrixtable,
@@ -31,6 +32,35 @@ from lrs_annotation.utils import (
     write_mapping_to_file,
     write_to_json,
 )
+
+@stage.stage
+class LongTRPathogenicReport(stage.SequencingGroupStage):
+    """
+    Screen a LongTR VCF against STRchive disease-associated TR loci
+    and generate a standalone HTML report.
+    """
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
+        return sequencing_group.dataset.web_prefix() / 'longtr' / f'{sequencing_group.id}.longtr_pathogenic.html'
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
+        # TODO: replace with metamist query for LongTR VCFs
+        longtr_vcf_overrides: dict[str, str] = config_retrieve(['workflow', 'longtr_vcf_paths'], default={})
+        vcf_path = longtr_vcf_overrides.get(sequencing_group.id)
+
+        if not vcf_path:
+            logger.warning(f'No LongTR VCF found for {sequencing_group.id}, skipping')
+            return self.make_outputs(sequencing_group)
+
+        output = self.expected_outputs(sequencing_group)
+
+        job = longtr_pathogenic_report(
+            vcf_path=vcf_path,
+            output=output,
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+
+        return self.make_outputs(sequencing_group, data=output, jobs=job)
 
 
 @stage.stage
