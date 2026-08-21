@@ -33,6 +33,7 @@ from lrs_annotation.utils import (
     write_to_json,
 )
 
+
 @stage.stage
 class LongTRPathogenicReport(stage.SequencingGroupStage):
     """
@@ -43,7 +44,9 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
         return sequencing_group.dataset.web_prefix() / 'longtr' / f'{sequencing_group.id}.longtr_pathogenic.html'
 
-    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
+    def queue_jobs(
+        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
+    ) -> stage.StageOutput | None:
         # TODO: replace with metamist query for LongTR VCFs
         longtr_vcf_overrides: dict[str, str] = config_retrieve(['workflow', 'longtr_vcf_paths'], default={})
         vcf_path = longtr_vcf_overrides.get(sequencing_group.id)

@@ -8,6 +8,7 @@ Requires two reference files from STRchive (github.com/dashnowlab/STRchive):
 """
 
 import gzip
+import itertools
 import json
 import re
 import urllib.request
@@ -19,12 +20,12 @@ from pathlib import Path
 import jinja2
 from markupsafe import Markup
 
-STRCHIVE_JSON_URL = (
-    'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/STRchive-loci.json'
-)
+MIN_BED_COLUMNS = 5
+MIN_VCF_COLUMNS = 10
+
+STRCHIVE_JSON_URL = 'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/STRchive-loci.json'
 STRCHIVE_BED_URL = (
-    'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/catalogs/'
-    'STRchive-disease-loci.hg38.longTR.bed'
+    'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/catalogs/STRchive-disease-loci.hg38.longTR.bed'
 )
 
 MATCH_TOLERANCE = 20
@@ -39,8 +40,11 @@ def open_vcf(path: str):
 def download_if_missing(path: Path, url: str) -> Path:
     if path.exists():
         return path
+    if not url.startswith(('https://', 'http://')):
+        msg = f'URL must use https or http scheme: {url}'
+        raise ValueError(msg)
     print(f'Downloading {url} ...')
-    urllib.request.urlretrieve(url, path)
+    urllib.request.urlretrieve(url, path)  # noqa: S310
     return path
 
 
@@ -53,20 +57,22 @@ def load_strchive_json(path: str) -> dict:
 def load_longtr_bed(path: str) -> list[dict]:
     entries = []
     with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
+        for raw_line in f:
+            stripped = raw_line.strip()
+            if not stripped or stripped.startswith('#'):
                 continue
-            parts = line.split('\t')
-            if len(parts) < 5:
+            parts = stripped.split('\t')
+            if len(parts) < MIN_BED_COLUMNS:
                 continue
-            entries.append({
-                'chrom': parts[0],
-                'start': int(parts[1]),
-                'end': int(parts[2]),
-                'motifs': parts[3].split(','),
-                'locus_id': parts[4],
-            })
+            entries.append(
+                {
+                    'chrom': parts[0],
+                    'start': int(parts[1]),
+                    'end': int(parts[2]),
+                    'motifs': parts[3].split(','),
+                    'locus_id': parts[4],
+                }
+            )
     return entries
 
 
@@ -103,9 +109,17 @@ def parse_format_sample(fmt_str: str, sample_str: str) -> dict[str, str]:
 
 
 IUPAC_MAP = {
-    'N': '[ACGT]', 'R': '[AG]', 'Y': '[CT]', 'S': '[GC]',
-    'W': '[AT]', 'K': '[GT]', 'M': '[AC]', 'B': '[CGT]',
-    'D': '[AGT]', 'H': '[ACT]', 'V': '[ACG]',
+    'N': '[ACGT]',
+    'R': '[AG]',
+    'Y': '[CT]',
+    'S': '[GC]',
+    'W': '[AT]',
+    'K': '[GT]',
+    'M': '[AC]',
+    'B': '[CGT]',
+    'D': '[AGT]',
+    'H': '[ACT]',
+    'V': '[ACG]',
 }
 
 _motif_regex_cache: dict[str, re.Pattern] = {}
@@ -138,7 +152,7 @@ def highlight_motifs_in_sequence(sequence: str, motif: str) -> str:
     last_end = 0
     for m in pattern.finditer(seq):
         if m.start() > last_end:
-            gap = seq[last_end:m.start()]
+            gap = seq[last_end : m.start()]
             parts.append(f'<span class="motif-interrupt">{gap}</span>')
         parts.append(f'<span class="motif-match">{m.group()}</span>')
         last_end = m.end()
@@ -149,7 +163,6 @@ def highlight_motifs_in_sequence(sequence: str, motif: str) -> str:
 
 
 def compute_allele_repeat_units(
-    ref_seq: str,
     period: int,
     gb_str: str,
     info_start: int,
@@ -174,10 +187,10 @@ def compute_allele_repeat_units(
     gb_sep = '|' if '|' in gb_str else '/'
     gb_parts = gb_str.split(gb_sep)
 
-    alleles = []
+    alleles: list[float] = []
     for i, allele_idx in enumerate(gt_indices):
         if allele_idx > 0 and allele_idx <= len(alt_alleles) and alt_alleles[allele_idx - 1] != '.':
-            alleles.append(count_motif_in_sequence(alt_alleles[allele_idx - 1], motif))
+            alleles.append(float(count_motif_in_sequence(alt_alleles[allele_idx - 1], motif)))
         else:
             try:
                 bp_diff = int(gb_parts[i]) if i < len(gb_parts) else 0
@@ -196,14 +209,16 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:
 
     if pathogenic_min is not None and repeat_units >= pathogenic_min:
         return 'pathogenic'
-    if intermediate_min is not None and intermediate_max is not None:
-        if intermediate_min <= repeat_units <= intermediate_max:
-            return 'intermediate'
+    if (
+        intermediate_min is not None
+        and intermediate_max is not None
+        and intermediate_min <= repeat_units <= intermediate_max
+    ):
+        return 'intermediate'
     if benign_max is not None and repeat_units <= benign_max:
         return 'normal'
-    if benign_max is not None and pathogenic_min is not None:
-        if repeat_units > benign_max and repeat_units < pathogenic_min:
-            return 'intermediate'
+    if benign_max is not None and pathogenic_min is not None and benign_max < repeat_units < pathogenic_min:
+        return 'intermediate'
     if benign_max is not None and repeat_units > benign_max:
         return 'uncertain'
     return 'normal'
@@ -214,26 +229,94 @@ def classify_locus(status1: str, status2: str) -> str:
     return status1 if priority.get(status1, 99) <= priority.get(status2, 99) else status2
 
 
-def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> list[dict]:
+def _parse_gt_indices(gt_str: str) -> list[int]:
+    sep = '|' if '|' in gt_str else '/'
+    indices = []
+    for idx_str in gt_str.split(sep):
+        try:
+            indices.append(int(idx_str))
+        except ValueError:
+            indices.append(0)
+    if len(indices) == 1:
+        indices = [indices[0], indices[0]]
+    return indices
+
+
+def _resolve_allele_seq(gt_idx: int, alt_alleles: list[str], ref_seq: str) -> str:
+    if gt_idx > 0 and gt_idx <= len(alt_alleles):
+        return alt_alleles[gt_idx - 1]
+    return ref_seq
+
+
+def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int) -> list[float]:
+    if not allreads_str or allreads_str == '.':
+        return []
+    ref_repeat_bp = vcf_end - vcf_start + 1
+    ref_copies = ref_repeat_bp / period
+    read_alleles = []
+    for token in allreads_str.split(';'):
+        parts = token.strip().split('|')
+        if not parts[0]:
+            continue
+        try:
+            bp_diff = int(parts[0])
+            count = int(parts[1]) if len(parts) > 1 else 1
+            ru = round(ref_copies + bp_diff / period, 1)
+            read_alleles.extend([ru] * count)
+        except ValueError:
+            pass
+    return read_alleles
+
+
+def _build_locus_meta(meta: dict, entry: dict) -> dict:
+    motif_list = meta.get('reference_motif_reference_orientation', entry['motifs'])
+    return {
+        'gene': meta.get('gene', ''),
+        'disease': meta.get('disease', ''),
+        'disease_id': meta.get('disease_id', ''),
+        'chrom': entry['chrom'],
+        'start': entry['start'],
+        'end': entry['end'],
+        'motif': ','.join(motif_list),
+        'primary_motif': motif_list[0] if motif_list else '',
+        'period': meta.get('motif_len', 0),
+        'location_in_gene': meta.get('location_in_gene', ''),
+        'inheritance': ', '.join(meta.get('inheritance', [])),
+        'mechanism': meta.get('mechanism', ''),
+        'benign_min': meta.get('benign_min'),
+        'benign_max': meta.get('benign_max'),
+        'intermediate_min': meta.get('intermediate_min'),
+        'intermediate_max': meta.get('intermediate_max'),
+        'pathogenic_min': meta.get('pathogenic_min'),
+        'pathogenic_max': meta.get('pathogenic_max'),
+        'ref_copies': meta.get('ref_copies'),
+    }
+
+
+def _read_vcf_line(raw_line) -> str:
+    if isinstance(raw_line, bytes):
+        return raw_line.decode().rstrip('\n')
+    return raw_line.rstrip('\n')
+
+
+def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dict], str]:
     results = {}
     sample_name = ''
 
     with open_vcf(vcf_path) as f:
-        for line in f:
-            if isinstance(line, bytes):
-                line = line.decode()
-            line = line.rstrip('\n')
+        for raw_line in f:
+            text = _read_vcf_line(raw_line)
 
-            if line.startswith('##'):
+            if text.startswith('##'):
                 continue
-            if line.startswith('#CHROM'):
-                cols = line.split('\t')
-                if len(cols) >= 10:
+            if text.startswith('#CHROM'):
+                cols = text.split('\t')
+                if len(cols) >= MIN_VCF_COLUMNS:
                     sample_name = cols[9]
                 continue
 
-            cols = line.split('\t')
-            if len(cols) < 10:
+            cols = text.split('\t')
+            if len(cols) < MIN_VCF_COLUMNS:
                 continue
 
             chrom = cols[0]
@@ -256,116 +339,97 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> list[dict]:
             if meta is None:
                 continue
 
-            sample_data = parse_format_sample(cols[8], cols[9])
-            period = int(info.get('PERIOD', meta.get('motif_len', 3)))
+            results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info)
 
-            alt_field = cols[4]
-            alt_alleles = alt_field.split(',') if alt_field != '.' else []
+    _add_missing_loci(results, locus_index, strchive)
 
-            motif_list = meta.get('reference_motif_reference_orientation', match['motifs'])
-            primary_motif = motif_list[0] if motif_list else match['motifs'][0]
+    sorted_results = sorted(
+        results.values(),
+        key=lambda r: (
+            {'pathogenic': 0, 'intermediate': 1, 'uncertain': 2, 'normal': 3, 'not_genotyped': 4}.get(
+                r['locus_status'], 5
+            ),
+            r['chrom'],
+            r['start'],
+        ),
+    )
 
-            gt_str = sample_data.get('GT', '0/0')
-            gb = sample_data.get('GB', '0|0')
-            a1, a2 = compute_allele_repeat_units(
-                cols[3], period, gb, vcf_start, vcf_end,
-                gt_str, alt_alleles, primary_motif,
-            )
+    return sorted_results, sample_name
 
-            gt_sep = '|' if '|' in gt_str else '/'
-            gt_indices = []
-            for idx_str in gt_str.split(gt_sep):
-                try:
-                    gt_indices.append(int(idx_str))
-                except ValueError:
-                    gt_indices.append(0)
-            if len(gt_indices) == 1:
-                gt_indices = [gt_indices[0], gt_indices[0]]
 
-            ref_seq = cols[3]
-            allele1_seq = alt_alleles[gt_indices[0] - 1] if gt_indices[0] > 0 and gt_indices[0] <= len(alt_alleles) else ref_seq
-            allele2_seq = alt_alleles[gt_indices[1] - 1] if gt_indices[1] > 0 and gt_indices[1] <= len(alt_alleles) else ref_seq
+def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
+    sample_data = parse_format_sample(cols[8], cols[9])
+    period = int(info.get('PERIOD', meta.get('motif_len', 3)))
 
-            s1 = classify_allele(a1, meta)
-            s2 = classify_allele(a2, meta)
+    alt_alleles = cols[4].split(',') if cols[4] != '.' else []
+    motif_list = meta.get('reference_motif_reference_orientation', match['motifs'])
+    primary_motif = motif_list[0] if motif_list else match['motifs'][0]
 
-            allreads_str = sample_data.get('ALLREADS', '')
-            read_alleles = []
-            if allreads_str and allreads_str != '.':
-                ref_repeat_bp = vcf_end - vcf_start + 1
-                ref_copies = ref_repeat_bp / period
-                for entry in allreads_str.split(';'):
-                    entry = entry.strip()
-                    if not entry:
-                        continue
-                    parts = entry.split('|')
-                    if len(parts) >= 2:
-                        try:
-                            bp_diff = int(parts[0])
-                            count = int(parts[1])
-                            ru = round(ref_copies + bp_diff / period, 1)
-                            for _ in range(count):
-                                read_alleles.append(ru)
-                        except ValueError:
-                            pass
+    gt_str = sample_data.get('GT', '0/0')
+    a1, a2 = compute_allele_repeat_units(
+        period,
+        sample_data.get('GB', '0|0'),
+        vcf_start,
+        vcf_end,
+        gt_str,
+        alt_alleles,
+        primary_motif,
+    )
 
-            results[locus_id] = {
-                'locus_id': locus_id,
-                'gene': meta.get('gene', ''),
-                'disease': meta.get('disease', ''),
-                'disease_id': meta.get('disease_id', ''),
-                'chrom': chrom,
-                'start': vcf_start,
-                'end': vcf_end,
-                'motif': ','.join(motif_list),
-                'primary_motif': primary_motif,
-                'period': period,
-                'location_in_gene': meta.get('location_in_gene', ''),
-                'inheritance': ', '.join(meta.get('inheritance', [])),
-                'mechanism': meta.get('mechanism', ''),
-                'allele1_ru': a1,
-                'allele2_ru': a2,
-                'allele1_seq': allele1_seq,
-                'allele2_seq': allele2_seq,
-                'allele1_status': s1,
-                'allele2_status': s2,
-                'locus_status': classify_locus(s1, s2),
-                'benign_min': meta.get('benign_min'),
-                'benign_max': meta.get('benign_max'),
-                'intermediate_min': meta.get('intermediate_min'),
-                'intermediate_max': meta.get('intermediate_max'),
-                'pathogenic_min': meta.get('pathogenic_min'),
-                'pathogenic_max': meta.get('pathogenic_max'),
-                'ref_copies': meta.get('ref_copies'),
-                'dp': sample_data.get('DP', '.'),
-                'q': sample_data.get('Q', '.'),
-                'pq': sample_data.get('PQ', '.'),
-                'gldiff': sample_data.get('GLDIFF', '.'),
-                'gt': sample_data.get('GT', '.'),
-                'filter': sample_data.get('FILTER', '.'),
-                'read_alleles': read_alleles,
-                'genotyped': True,
-            }
+    gt_indices = _parse_gt_indices(gt_str)
+    ref_seq = cols[3]
+    s1 = classify_allele(a1, meta)
+    s2 = classify_allele(a2, meta)
 
-    for entry in sum(locus_index.values(), []):
+    return {
+        'locus_id': match['locus_id'],
+        'gene': meta.get('gene', ''),
+        'disease': meta.get('disease', ''),
+        'disease_id': meta.get('disease_id', ''),
+        'chrom': cols[0],
+        'start': vcf_start,
+        'end': vcf_end,
+        'motif': ','.join(motif_list),
+        'primary_motif': primary_motif,
+        'period': period,
+        'location_in_gene': meta.get('location_in_gene', ''),
+        'inheritance': ', '.join(meta.get('inheritance', [])),
+        'mechanism': meta.get('mechanism', ''),
+        'allele1_ru': a1,
+        'allele2_ru': a2,
+        'allele1_seq': _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq),
+        'allele2_seq': _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq),
+        'allele1_status': s1,
+        'allele2_status': s2,
+        'locus_status': classify_locus(s1, s2),
+        'benign_min': meta.get('benign_min'),
+        'benign_max': meta.get('benign_max'),
+        'intermediate_min': meta.get('intermediate_min'),
+        'intermediate_max': meta.get('intermediate_max'),
+        'pathogenic_min': meta.get('pathogenic_min'),
+        'pathogenic_max': meta.get('pathogenic_max'),
+        'ref_copies': meta.get('ref_copies'),
+        'dp': sample_data.get('DP', '.'),
+        'q': sample_data.get('Q', '.'),
+        'pq': sample_data.get('PQ', '.'),
+        'gldiff': sample_data.get('GLDIFF', '.'),
+        'gt': sample_data.get('GT', '.'),
+        'filter': sample_data.get('FILTER', '.'),
+        'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
+        'genotyped': True,
+    }
+
+
+def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
+    for entry in itertools.chain.from_iterable(locus_index.values()):
         lid = entry['locus_id']
-        if lid not in results:
-            meta = strchive.get(lid, {})
-            motif_list = meta.get('reference_motif_reference_orientation', entry['motifs'])
-            results[lid] = {
+        if lid in results:
+            continue
+        meta = strchive.get(lid, {})
+        base = _build_locus_meta(meta, entry)
+        base.update(
+            {
                 'locus_id': lid,
-                'gene': meta.get('gene', ''),
-                'disease': meta.get('disease', ''),
-                'disease_id': meta.get('disease_id', ''),
-                'chrom': entry['chrom'],
-                'start': entry['start'],
-                'end': entry['end'],
-                'motif': ','.join(motif_list),
-                'primary_motif': motif_list[0] if motif_list else '',
-                'period': meta.get('motif_len', 0),
-                'location_in_gene': meta.get('location_in_gene', ''),
-                'inheritance': ', '.join(meta.get('inheritance', [])),
-                'mechanism': meta.get('mechanism', ''),
                 'allele1_ru': None,
                 'allele2_ru': None,
                 'allele1_seq': None,
@@ -373,13 +437,6 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> list[dict]:
                 'allele1_status': 'not_genotyped',
                 'allele2_status': 'not_genotyped',
                 'locus_status': 'not_genotyped',
-                'benign_min': meta.get('benign_min'),
-                'benign_max': meta.get('benign_max'),
-                'intermediate_min': meta.get('intermediate_min'),
-                'intermediate_max': meta.get('intermediate_max'),
-                'pathogenic_min': meta.get('pathogenic_min'),
-                'pathogenic_max': meta.get('pathogenic_max'),
-                'ref_copies': meta.get('ref_copies'),
                 'dp': '.',
                 'q': '.',
                 'pq': '.',
@@ -389,95 +446,119 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> list[dict]:
                 'read_alleles': [],
                 'genotyped': False,
             }
+        )
+        results[lid] = base
 
-    sorted_results = sorted(results.values(), key=lambda r: (
-        {'pathogenic': 0, 'intermediate': 1, 'uncertain': 2, 'normal': 3, 'not_genotyped': 4}.get(r['locus_status'], 5),
-        r['chrom'],
-        r['start'],
-    ))
 
-    return sorted_results, sample_name
+def _gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result) -> list[str]:
+    parts = []
+    benign_max = result['benign_max']
+    pathogenic_min = result['pathogenic_min']
+    intermediate_min = result['intermediate_min']
+    intermediate_max = result['intermediate_max']
+
+    if benign_max is not None:
+        bw = x_pos(benign_max) - margin_l
+        parts.append(
+            f'<rect x="{margin_l}" y="{bar_y}" width="{bw}" height="{bar_h}" fill="#28a745" opacity="0.5" rx="3"/>'
+        )
+
+    if intermediate_min is not None and intermediate_max is not None:
+        ix1, ix2 = x_pos(intermediate_min), x_pos(intermediate_max)
+        parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2 - ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
+    elif benign_max is not None and pathogenic_min is not None and pathogenic_min > benign_max + 1:
+        ix1, ix2 = x_pos(benign_max), x_pos(pathogenic_min)
+        parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2 - ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
+
+    if pathogenic_min is not None:
+        px1 = x_pos(pathogenic_min)
+        parts.append(
+            f'<rect x="{px1}" y="{bar_y}" width="{margin_l + bar_w - px1}" height="{bar_h}"'
+            ' fill="#dc3545" opacity="0.5" rx="3"/>'
+        )
+    return parts
+
+
+def _gauge_ticks(x_pos, bar_y, bar_h, result) -> list[str]:
+    tick_values = {
+        v
+        for v in [
+            0,
+            result['benign_max'],
+            result['intermediate_min'],
+            result['intermediate_max'],
+            result['pathogenic_min'],
+        ]
+        if v is not None
+    }
+    parts = []
+    min_gap = 30
+    last_x = -999.0
+    for tv in sorted(tick_values):
+        tx = x_pos(tv)
+        ty = bar_y + bar_h
+        parts.append(
+            f'<line x1="{tx}" y1="{bar_y}" x2="{tx}" y2="{ty}"'
+            ' stroke="#333" stroke-width="0.5" stroke-dasharray="2,1"/>',
+        )
+        if tx - last_x >= min_gap:
+            parts.append(
+                f'<text x="{tx}" y="{ty + 11}" text-anchor="middle" font-size="9" fill="#666">{tv:.0f}</text>',
+            )
+            last_x = tx
+    return parts
+
+
+def _gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result) -> list[str]:
+    parts = []
+    for ra in result.get('read_alleles', []):
+        if ra <= scale_max:
+            rx, cy = x_pos(ra), bar_y + bar_h / 2
+            parts.append(f'<circle cx="{rx}" cy="{cy}" r="2" fill="rgba(100,100,100,0.15)" stroke="none"/>')
+
+    for allele_val, color in [(a1, '#0d6efd'), (a2, '#6610f2')]:
+        if allele_val is None:
+            continue
+        ax = x_pos(min(allele_val, scale_max))
+        parts.append(
+            f'<line x1="{ax}" y1="{bar_y - 2}" x2="{ax}"'
+            f' y2="{bar_y + bar_h + 2}" stroke="{color}" stroke-width="2.5"/>',
+        )
+        parts.append(f'<circle cx="{ax}" cy="{bar_y - 5}" r="4" fill="{color}"/>')
+        label_text = f'{allele_val:.0f}' if allele_val == int(allele_val) else f'{allele_val:.1f}'
+        parts.append(
+            f'<text x="{ax}" y="{bar_y - 10}" text-anchor="middle"'
+            f' font-size="8" font-weight="bold" fill="{color}">{label_text}</text>',
+        )
+    return parts
 
 
 def svg_gauge(result: dict, width: int = 600) -> str:
     if not result['genotyped']:
         return '<div class="gauge-placeholder">Not genotyped — locus not found in VCF</div>'
 
-    benign_max = result['benign_max']
-    pathogenic_min = result['pathogenic_min']
-    pathogenic_max = result['pathogenic_max']
-    intermediate_min = result['intermediate_min']
-    intermediate_max = result['intermediate_max']
     a1 = result['allele1_ru']
     a2 = result['allele2_ru']
-
-    scale_values = [v for v in [a1, a2, benign_max, pathogenic_min, intermediate_max] if v is not None]
+    scale_values = [
+        v for v in [a1, a2, result['benign_max'], result['pathogenic_min'], result['intermediate_max']] if v is not None
+    ]
     if not scale_values:
         return '<div class="gauge-placeholder">No threshold data available</div>'
 
-    scale_max = max(scale_values) * 1.3
-    scale_max = max(scale_max, 10)
-
-    h = 70
-    bar_y = 25
-    bar_h = 20
-    margin_l = 10
+    scale_max = max(max(scale_values) * 1.3, 10)
+    h, bar_y, bar_h, margin_l = 70, 25, 20, 10
     bar_w = width - 2 * margin_l
 
-    def x_pos(val):
+    def x_pos(val) -> float:
         return margin_l + (val / scale_max) * bar_w
 
-    svg_parts = [f'<svg viewBox="0 0 {width} {h}" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">']
-
-    svg_parts.append(f'<rect x="{margin_l}" y="{bar_y}" width="{bar_w}" height="{bar_h}" fill="#e9ecef" rx="3"/>')
-
-    if benign_max is not None:
-        bw = x_pos(min(benign_max, scale_max)) - margin_l
-        svg_parts.append(f'<rect x="{margin_l}" y="{bar_y}" width="{bw}" height="{bar_h}" fill="#28a745" opacity="0.5" rx="3"/>')
-
-    if intermediate_min is not None and intermediate_max is not None:
-        ix1 = x_pos(intermediate_min)
-        ix2 = x_pos(min(intermediate_max, scale_max))
-        svg_parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2-ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
-    elif benign_max is not None and pathogenic_min is not None and pathogenic_min > benign_max + 1:
-        ix1 = x_pos(benign_max)
-        ix2 = x_pos(pathogenic_min)
-        svg_parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2-ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
-
-    if pathogenic_min is not None:
-        px1 = x_pos(pathogenic_min)
-        px2 = margin_l + bar_w
-        svg_parts.append(f'<rect x="{px1}" y="{bar_y}" width="{px2-px1}" height="{bar_h}" fill="#dc3545" opacity="0.5" rx="3"/>')
-
-    tick_values = set()
-    for v in [0, benign_max, intermediate_min, intermediate_max, pathogenic_min]:
-        if v is not None:
-            tick_values.add(v)
-    min_label_gap = 30
-    last_label_x = -999
-    for tv in sorted(tick_values):
-        tx = x_pos(tv)
-        svg_parts.append(f'<line x1="{tx}" y1="{bar_y}" x2="{tx}" y2="{bar_y+bar_h}" stroke="#333" stroke-width="0.5" stroke-dasharray="2,1"/>')
-        if tx - last_label_x >= min_label_gap:
-            svg_parts.append(f'<text x="{tx}" y="{bar_y+bar_h+11}" text-anchor="middle" font-size="9" fill="#666">{tv:.0f}</text>')
-            last_label_x = tx
-
-    read_alleles = result.get('read_alleles', [])
-    if read_alleles:
-        for ra in read_alleles:
-            if ra <= scale_max:
-                rx = x_pos(ra)
-                svg_parts.append(f'<circle cx="{rx}" cy="{bar_y + bar_h/2}" r="2" fill="rgba(100,100,100,0.15)" stroke="none"/>')
-
-    for allele_val, label, color in [(a1, 'A1', '#0d6efd'), (a2, 'A2', '#6610f2')]:
-        if allele_val is None:
-            continue
-        ax = x_pos(min(allele_val, scale_max))
-        svg_parts.append(f'<line x1="{ax}" y1="{bar_y-2}" x2="{ax}" y2="{bar_y+bar_h+2}" stroke="{color}" stroke-width="2.5"/>')
-        svg_parts.append(f'<circle cx="{ax}" cy="{bar_y-5}" r="4" fill="{color}"/>')
-        label_text = f'{allele_val:.0f}' if allele_val == int(allele_val) else f'{allele_val:.1f}'
-        svg_parts.append(f'<text x="{ax}" y="{bar_y-10}" text-anchor="middle" font-size="8" font-weight="bold" fill="{color}">{label_text}</text>')
-
+    svg_parts = [
+        f'<svg viewBox="0 0 {width} {h}" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">',
+        f'<rect x="{margin_l}" y="{bar_y}" width="{bar_w}" height="{bar_h}" fill="#e9ecef" rx="3"/>',
+    ]
+    svg_parts.extend(_gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result))
+    svg_parts.extend(_gauge_ticks(x_pos, bar_y, bar_h, result))
+    svg_parts.extend(_gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result))
     svg_parts.append('</svg>')
     return '\n'.join(svg_parts)
 
@@ -502,9 +583,9 @@ def generate_html(results: list[dict], sample_name: str) -> str:
         ),
         autoescape=True,
     )
-    env.globals['svg_gauge'] = lambda r: Markup(svg_gauge(r))
-    env.globals['status_badge'] = lambda s: Markup(status_badge(s))
-    env.globals['highlight_seq'] = lambda seq, motif: Markup(highlight_motifs_in_sequence(seq, motif))
+    env.globals['svg_gauge'] = lambda r: Markup(svg_gauge(r))  # noqa: S704
+    env.globals['status_badge'] = lambda s: Markup(status_badge(s))  # noqa: S704
+    env.globals['highlight_seq'] = lambda seq, motif: Markup(highlight_motifs_in_sequence(seq, motif))  # noqa: S704
 
     template = env.get_template('longtr_pathogenic.html.jinja')
 
@@ -528,13 +609,16 @@ def generate_report(vcf_path: str, strchive_json: str, longtr_bed: str, output: 
     html_content = generate_html(results, sample_name)
     with open(output, 'w') as f:
         f.write(html_content)
-    def _fmt_ru(v):
+
+    def _fmt_ru(v) -> str:
         return f'{v:.0f}' if v == int(v) else f'{v:.1f}'
 
     print(f'Screened {len(results)} disease loci ({sum(1 for r in results if r["genotyped"])} genotyped)')
     for r in results:
         if r['locus_status'] in ('pathogenic', 'intermediate', 'uncertain'):
-            print(f'  ⚠ {r["gene"]} ({r["disease"]}): {r["locus_status"]} — {_fmt_ru(r["allele1_ru"])}/{_fmt_ru(r["allele2_ru"])} repeats')
+            a1_str = _fmt_ru(r['allele1_ru'])
+            a2_str = _fmt_ru(r['allele2_ru'])
+            print(f'  ⚠ {r["gene"]} ({r["disease"]}): {r["locus_status"]} — {a1_str}/{a2_str} repeats')
     print(f'Report written to {output}')
 
 
@@ -559,12 +643,18 @@ def cli_main():
     cache_dir = Path.home() / '.cache' / 'longtr_pathogenic'
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    json_path = args.strchive_json or str(download_if_missing(
-        cache_dir / 'STRchive-loci.json', STRCHIVE_JSON_URL,
-    ))
-    bed_path = args.longtr_bed or str(download_if_missing(
-        cache_dir / 'STRchive-disease-loci.hg38.longTR.bed', STRCHIVE_BED_URL,
-    ))
+    json_path = args.strchive_json or str(
+        download_if_missing(
+            cache_dir / 'STRchive-loci.json',
+            STRCHIVE_JSON_URL,
+        )
+    )
+    bed_path = args.longtr_bed or str(
+        download_if_missing(
+            cache_dir / 'STRchive-disease-loci.hg38.longTR.bed',
+            STRCHIVE_BED_URL,
+        )
+    )
 
     generate_report(args.vcf_path, json_path, bed_path, args.output)
 
