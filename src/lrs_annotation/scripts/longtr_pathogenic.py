@@ -584,14 +584,51 @@ def generate_html(results: list[dict], sample_name: str) -> str:
     )
 
 
-def generate_report(vcf_path: str, strchive_json: str, longtr_bed: str, output: str):
+def build_json_output(
+    results: list[dict], sample_name: str, strchive_json_path: str, longtr_bed_path: str,
+) -> dict:
+    json_fields = (
+        'locus_id', 'gene', 'disease', 'disease_id', 'chrom', 'start', 'end',
+        'motif', 'primary_motif', 'period', 'inheritance', 'mechanism',
+        'allele1_ru', 'allele2_ru', 'allele1_seq', 'allele2_seq',
+        'allele1_status', 'allele2_status', 'locus_status',
+        'benign_max', 'intermediate_min', 'intermediate_max', 'pathogenic_min', 'pathogenic_max',
+        'ref_copies', 'gt', 'dp', 'q', 'genotyped',
+    )
+    return {
+        'sample_name': sample_name,
+        'catalog': {
+            'strchive_json': strchive_json_path,
+            'longtr_bed': longtr_bed_path,
+        },
+        'summary': {
+            'total_loci': len(results),
+            'genotyped': sum(1 for r in results if r['genotyped']),
+            'pathogenic': sum(1 for r in results if r['locus_status'] == 'pathogenic'),
+            'intermediate': sum(1 for r in results if r['locus_status'] == 'intermediate'),
+            'uncertain': sum(1 for r in results if r['locus_status'] == 'uncertain'),
+            'normal': sum(1 for r in results if r['locus_status'] == 'normal'),
+            'not_genotyped': sum(1 for r in results if not r['genotyped']),
+        },
+        'loci': [{k: v for k, v in r.items() if k in json_fields} for r in results],
+    }
+
+
+def generate_report(
+    vcf_path: str, strchive_json: str, longtr_bed: str, output_html: str, output_json: str,
+):
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
     locus_index = build_locus_index(bed_entries)
     results, sample_name = scan_vcf(vcf_path, locus_index, strchive)
+
     html_content = generate_html(results, sample_name)
-    with open(output, 'w') as f:
+    with open(output_html, 'w') as f:
         f.write(html_content)
+
+    json_output = build_json_output(results, sample_name, strchive_json, longtr_bed)
+    with open(output_json, 'w') as f:
+        json.dump(json_output, f, indent=2)
 
     def _fmt_ru(v) -> str:
         return f'{v:.0f}' if v == int(v) else f'{v:.1f}'
@@ -602,7 +639,8 @@ def generate_report(vcf_path: str, strchive_json: str, longtr_bed: str, output: 
             a1_str = _fmt_ru(r['allele1_ru'])
             a2_str = _fmt_ru(r['allele2_ru'])
             print(f'  ⚠ {r["gene"]} ({r["disease"]}): {r["locus_status"]} — {a1_str}/{a2_str} repeats')
-    print(f'Report written to {output}')
+    print(f'HTML report: {output_html}')
+    print(f'JSON results: {output_json}')
 
 
 def cli_main():
@@ -612,10 +650,11 @@ def cli_main():
     parser.add_argument('--vcf_path', required=True, help='Path to LongTR VCF file')
     parser.add_argument('--strchive_json', required=True, help='Path to STRchive-loci.json')
     parser.add_argument('--longtr_bed', required=True, help='Path to STRchive LongTR BED catalog')
-    parser.add_argument('--output', default='longtr_pathogenic.html', help='Output HTML file')
+    parser.add_argument('--output_html', default='longtr_pathogenic.html', help='Output HTML file')
+    parser.add_argument('--output_json', default='longtr_pathogenic.json', help='Output JSON file')
     args = parser.parse_args()
 
-    generate_report(args.vcf_path, args.strchive_json, args.longtr_bed, args.output)
+    generate_report(args.vcf_path, args.strchive_json, args.longtr_bed, args.output_html, args.output_json)
 
 
 if __name__ == '__main__':

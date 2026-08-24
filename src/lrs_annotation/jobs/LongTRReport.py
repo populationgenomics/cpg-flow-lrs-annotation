@@ -12,14 +12,15 @@ from lrs_annotation.scripts import longtr_pathogenic
 
 def longtr_pathogenic_report(
     vcf_path: str,
-    output: Path,
+    output_html: Path,
+    output_json: Path,
     job_attrs: dict[str, str],
 ) -> Job:
     """
     Run the LongTR pathogenic screening script on a VCF file.
 
     Localizes the VCF and STRchive reference files onto the VM,
-    then runs the script to produce an HTML report.
+    then runs the script to produce an HTML report and a JSON results file.
     """
     batch_instance = hail_batch.get_batch()
 
@@ -37,8 +38,10 @@ def longtr_pathogenic_report(
         --vcf_path {local_vcf} \\
         --strchive_json {strchive_json} \\
         --longtr_bed {longtr_bed} \\
-        --output {job.output_file}
+        --output_html {job.html} \\
+        --output_json {job.json}
     """)
 
-    batch_instance.write_output(job.output_file, str(output))
+    batch_instance.write_output(job.html, str(output_html))
+    batch_instance.write_output(job.json, str(output_json))
     return job
