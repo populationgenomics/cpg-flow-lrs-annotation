@@ -41,8 +41,13 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
     and generate a standalone HTML report.
     """
 
-    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> Path:
-        return sequencing_group.dataset.web_prefix() / 'longtr' / f'{sequencing_group.id}.longtr_pathogenic.html'
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        prefix = sequencing_group.dataset.web_prefix() / 'longtr'
+        sg_id = sequencing_group.id
+        return {
+            'html': prefix / f'{sg_id}.longtr_pathogenic.html',
+            'json': prefix / f'{sg_id}.longtr_pathogenic.json',
+        }
 
     def queue_jobs(
         self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
@@ -55,15 +60,16 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             logger.warning(f'No LongTR VCF found for {sequencing_group.id}, skipping')
             return self.make_outputs(sequencing_group)
 
-        output = self.expected_outputs(sequencing_group)
+        outputs = self.expected_outputs(sequencing_group)
 
         job = longtr_pathogenic_report(
             vcf_path=vcf_path,
-            output=output,
+            output_html=outputs['html'],
+            output_json=outputs['json'],
             job_attrs=self.get_job_attrs(sequencing_group),
         )
 
-        return self.make_outputs(sequencing_group, data=output, jobs=job)
+        return self.make_outputs(sequencing_group, data=outputs, jobs=job)
 
 
 @stage.stage

@@ -10,7 +10,7 @@ from cpg_flow.workflow import run_workflow
 
 from lrs_annotation.bam_to_cram_stages import ConvertBamToCram, CramQcSomalier
 from lrs_annotation.snps_indels_annotation_stages import ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt
-from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex
+from lrs_annotation.svs_annotation_stages import ExportSVsMtToElasticIndex, LongTRPathogenicReport
 
 
 def cli_main():
@@ -27,7 +27,7 @@ def cli_main():
     elif args.workflow == 'snps_indels':
         stages = [ExportSnpsIndelsMtToESIndex, ExportSnpsIndelsVcfToMt]
     elif args.workflow == 'svs':
-        stages = [ExportSVsMtToElasticIndex]
+        stages = [ExportSVsMtToElasticIndex, LongTRPathogenicReport]
     else:
         raise ValueError(f'Unknown workflow: {args.workflow}')
 
