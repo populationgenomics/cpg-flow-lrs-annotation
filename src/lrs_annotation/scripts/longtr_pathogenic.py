@@ -11,7 +11,6 @@ import gzip
 import itertools
 import json
 import re
-import urllib.request
 from argparse import ArgumentParser
 from collections import defaultdict
 from importlib import resources
@@ -23,11 +22,6 @@ from markupsafe import Markup
 MIN_BED_COLUMNS = 5
 MIN_VCF_COLUMNS = 10
 
-STRCHIVE_JSON_URL = 'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/STRchive-loci.json'
-STRCHIVE_BED_URL = (
-    'https://raw.githubusercontent.com/dashnowlab/STRchive/main/data/catalogs/STRchive-disease-loci.hg38.longTR.bed'
-)
-
 MATCH_TOLERANCE = 20
 
 
@@ -35,17 +29,6 @@ def open_vcf(path: str):
     if path.endswith('.gz'):
         return gzip.open(path, 'rt')
     return open(path)
-
-
-def download_if_missing(path: Path, url: str) -> Path:
-    if path.exists():
-        return path
-    if not url.startswith(('https://', 'http://')):
-        msg = f'URL must use https or http scheme: {url}'
-        raise ValueError(msg)
-    print(f'Downloading {url} ...')
-    urllib.request.urlretrieve(url, path)  # noqa: S310
-    return path
 
 
 def load_strchive_json(path: str) -> dict:
@@ -627,36 +610,12 @@ def cli_main():
         description='Screen a LongTR VCF against STRchive disease-associated TR loci.',
     )
     parser.add_argument('--vcf_path', required=True, help='Path to LongTR VCF file')
-    parser.add_argument(
-        '--strchive_json',
-        default=None,
-        help='Path to STRchive-loci.json (downloaded automatically if not provided)',
-    )
-    parser.add_argument(
-        '--longtr_bed',
-        default=None,
-        help='Path to STRchive LongTR BED catalog (downloaded automatically if not provided)',
-    )
+    parser.add_argument('--strchive_json', required=True, help='Path to STRchive-loci.json')
+    parser.add_argument('--longtr_bed', required=True, help='Path to STRchive LongTR BED catalog')
     parser.add_argument('--output', default='longtr_pathogenic.html', help='Output HTML file')
     args = parser.parse_args()
 
-    cache_dir = Path.home() / '.cache' / 'longtr_pathogenic'
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = args.strchive_json or str(
-        download_if_missing(
-            cache_dir / 'STRchive-loci.json',
-            STRCHIVE_JSON_URL,
-        )
-    )
-    bed_path = args.longtr_bed or str(
-        download_if_missing(
-            cache_dir / 'STRchive-disease-loci.hg38.longTR.bed',
-            STRCHIVE_BED_URL,
-        )
-    )
-
-    generate_report(args.vcf_path, json_path, bed_path, args.output)
+    generate_report(args.vcf_path, args.strchive_json, args.longtr_bed, args.output)
 
 
 if __name__ == '__main__':
