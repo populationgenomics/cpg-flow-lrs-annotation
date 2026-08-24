@@ -14,7 +14,6 @@ import re
 from argparse import ArgumentParser
 from collections import defaultdict
 from importlib import resources
-from pathlib import Path
 
 import jinja2
 from markupsafe import Markup
@@ -585,15 +584,41 @@ def generate_html(results: list[dict], sample_name: str) -> str:
 
 
 def build_json_output(
-    results: list[dict], sample_name: str, strchive_json_path: str, longtr_bed_path: str,
+    results: list[dict],
+    sample_name: str,
+    strchive_json_path: str,
+    longtr_bed_path: str,
 ) -> dict:
     json_fields = (
-        'locus_id', 'gene', 'disease', 'disease_id', 'chrom', 'start', 'end',
-        'motif', 'primary_motif', 'period', 'inheritance', 'mechanism',
-        'allele1_ru', 'allele2_ru', 'allele1_seq', 'allele2_seq',
-        'allele1_status', 'allele2_status', 'locus_status',
-        'benign_max', 'intermediate_min', 'intermediate_max', 'pathogenic_min', 'pathogenic_max',
-        'ref_copies', 'gt', 'dp', 'q', 'genotyped',
+        'locus_id',
+        'gene',
+        'disease',
+        'disease_id',
+        'chrom',
+        'start',
+        'end',
+        'motif',
+        'primary_motif',
+        'period',
+        'inheritance',
+        'mechanism',
+        'allele1_ru',
+        'allele2_ru',
+        'allele1_seq',
+        'allele2_seq',
+        'allele1_status',
+        'allele2_status',
+        'locus_status',
+        'benign_max',
+        'intermediate_min',
+        'intermediate_max',
+        'pathogenic_min',
+        'pathogenic_max',
+        'ref_copies',
+        'gt',
+        'dp',
+        'q',
+        'genotyped',
     )
     return {
         'sample_name': sample_name,
@@ -615,7 +640,11 @@ def build_json_output(
 
 
 def generate_report(
-    vcf_path: str, strchive_json: str, longtr_bed: str, output_html: str, output_json: str,
+    vcf_path: str,
+    strchive_json: str,
+    longtr_bed: str,
+    output_html: str,
+    output_json: str,
 ):
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
