@@ -13,7 +13,7 @@ import json
 import re
 from argparse import ArgumentParser
 from collections import defaultdict
-from importlib import resources
+from pathlib import Path
 
 import jinja2
 from markupsafe import Markup
@@ -559,10 +559,9 @@ def status_badge(status: str) -> str:
 
 
 def generate_html(results: list[dict], sample_name: str) -> str:
+    template_dir = Path(__file__).resolve().parent.parent / 'templates'
     env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(
-            str(resources.files('lrs_annotation') / 'templates'),
-        ),
+        loader=jinja2.FileSystemLoader(str(template_dir)),
         autoescape=True,
     )
     env.globals['svg_gauge'] = lambda r: Markup(svg_gauge(r))  # noqa: S704
