@@ -559,7 +559,7 @@ def status_badge(status: str) -> str:
 
 
 def generate_html(results: list[dict], sample_name: str) -> str:
-    template_dir = Path(__file__).resolve().parent.parent / 'templates'
+    template_dir = Path(__file__).resolve().parent / 'templates'
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(template_dir)),
         autoescape=True,

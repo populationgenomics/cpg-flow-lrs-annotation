@@ -53,7 +53,7 @@ package-dir = {"" = "src"}
 include_package_data = true
 
 [options.package_data]
-'lrs_annotation'=  ['lrs_annotation.toml', 'templates/*.jinja']
+'lrs_annotation'=  ['lrs_annotation.toml', 'scripts/templates/*.jinja']
 
 [tool.mypy]
 ignore_missing_imports = true
