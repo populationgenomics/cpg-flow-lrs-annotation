@@ -11,7 +11,12 @@ from cpg_utils import Path, to_path
 from cpg_utils.config import AR_GUID_NAME, config_retrieve, dataset_for_access_level, try_get_ar_guid
 from cpg_utils.hail_batch import get_batch
 
-from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
+from lrs_annotation.inputs import (
+    get_sgs_from_datasets,
+    query_for_longtr_vcfs,
+    query_for_lrs_mappings,
+    query_for_lrs_vcfs,
+)
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.LongTRReport import longtr_pathogenic_report
 from lrs_annotation.jobs.svs import (
@@ -52,9 +57,8 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
     def queue_jobs(
         self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
     ) -> stage.StageOutput | None:
-        # TODO: replace with metamist query for LongTR VCFs
-        longtr_vcf_overrides: dict[str, str] = config_retrieve(['workflow', 'longtr_vcf_paths'], default={})
-        vcf_path = longtr_vcf_overrides.get(sequencing_group.id)
+        longtr_vcfs = query_for_longtr_vcfs(sequencing_group.dataset.name)
+        vcf_path = longtr_vcfs.get(sequencing_group.id)
 
         if not vcf_path:
             logger.warning(f'No LongTR VCF found for {sequencing_group.id}, skipping')
