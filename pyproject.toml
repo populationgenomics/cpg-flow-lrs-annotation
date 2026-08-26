@@ -49,11 +49,8 @@ run_workflow = 'lrs_annotation.run_workflow:cli_main'
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-[options]
-include_package_data = true
-
-[options.package_data]
-'lrs_annotation'=  ['lrs_annotation.toml', 'scripts/templates/*.jinja']
+[tool.setuptools.package-data]
+lrs_annotation = ["lrs_annotation.toml", "scripts/templates/*.jinja"]
 
 [tool.mypy]
 ignore_missing_imports = true
