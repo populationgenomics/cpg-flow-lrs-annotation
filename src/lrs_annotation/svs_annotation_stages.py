@@ -18,7 +18,7 @@ from lrs_annotation.inputs import (
     query_for_lrs_vcfs,
 )
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
-from lrs_annotation.jobs.LongTRReport import longtr_pathogenic_report
+from lrs_annotation.jobs.LongTRReport import longtr_index_page, longtr_pathogenic_report
 from lrs_annotation.jobs.svs import (
     AnnotateCohortMatrixtable,
     AnnotateDatasetMatrixtable,
@@ -32,6 +32,7 @@ from lrs_annotation.jobs.svs import (
 from lrs_annotation.utils import (
     es_password,
     get_dataset_names,
+    get_longtr_loci_lists,
     get_query_filter_from_config,
     get_sg_vcfs_file_path,
     write_mapping_to_file,
@@ -43,16 +44,25 @@ from lrs_annotation.utils import (
 class LongTRPathogenicReport(stage.SequencingGroupStage):
     """
     Screen a LongTR VCF against STRchive disease-associated TR loci
-    and generate a standalone HTML report.
+    and generate standalone HTML reports, one per configured loci list.
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         prefix = sequencing_group.dataset.web_prefix() / 'longtr'
         sg_id = sequencing_group.id
-        return {
-            'html': prefix / f'{sg_id}.longtr_pathogenic.html',
-            'json': prefix / f'{sg_id}.longtr_pathogenic.json',
-        }
+        loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
+
+        if not loci_lists:
+            return {
+                'html': prefix / f'{sg_id}.longtr_pathogenic.html',
+                'json': prefix / f'{sg_id}.longtr_pathogenic.json',
+            }
+
+        outputs = {}
+        for list_name in loci_lists:
+            outputs[f'{list_name}_html'] = prefix / f'{sg_id}__{list_name}.longtr_pathogenic.html'
+            outputs[f'{list_name}_json'] = prefix / f'{sg_id}__{list_name}.longtr_pathogenic.json'
+        return outputs
 
     def queue_jobs(
         self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
@@ -65,15 +75,80 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             return self.make_outputs(sequencing_group)
 
         outputs = self.expected_outputs(sequencing_group)
+        loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
 
         job = longtr_pathogenic_report(
             vcf_path=vcf_path,
-            output_html=outputs['html'],
-            output_json=outputs['json'],
+            outputs=outputs,
             job_attrs=self.get_job_attrs(sequencing_group),
+            loci_lists=loci_lists or None,
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)
+
+
+@stage.stage(analysis_type='web', analysis_keys=['index'], required_stages=[LongTRPathogenicReport])
+class LongTRIndexPage(stage.DatasetStage):
+    """
+    Generate an index HTML page linking to all LongTR pathogenic reports in a dataset.
+    """
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        prefix = dataset.web_prefix() / 'longtr'
+        return {
+            'index': prefix / f'{dataset.name}_longtr_index.html',
+        }
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
+        outputs = self.expected_outputs(dataset)
+        all_sg_outputs = inputs.as_dict_by_target(LongTRPathogenicReport)
+        loci_lists = get_longtr_loci_lists(dataset.name)
+
+        dataset_sg_ids = dataset.get_sequencing_group_ids()
+        sg_outputs = {k: v for k, v in all_sg_outputs.items() if k in dataset_sg_ids}
+
+        file_prefix = config_retrieve(['storage', dataset.name, 'web'])
+        html_prefix = config_retrieve(['storage', dataset.name, 'web_url'])
+
+        manifest_data = []
+        for sg_id, output_dict in sg_outputs.items():
+            if loci_lists:
+                for list_name in loci_lists:
+                    html_key = f'{list_name}_html'
+                    if html_key in output_dict:
+                        url = str(output_dict[html_key]).replace(file_prefix, html_prefix)
+                        manifest_data.append(
+                            {
+                                'sample': sg_id,
+                                'report_type': list_name,
+                                'url': url,
+                                'date': '',
+                                'flagged_loci': [],
+                                'missing_loci': [],
+                            }
+                        )
+            elif 'html' in output_dict:
+                url = str(output_dict['html']).replace(file_prefix, html_prefix)
+                manifest_data.append(
+                    {
+                        'sample': sg_id,
+                        'report_type': 'default',
+                        'url': url,
+                        'date': '',
+                        'flagged_loci': [],
+                        'missing_loci': [],
+                    }
+                )
+
+        job = longtr_index_page(
+            dataset_name=dataset.name,
+            manifest_data=manifest_data,
+            loci_lists=loci_lists,
+            output_path=outputs['index'],
+            job_attrs=self.get_job_attrs(dataset),
+        )
+
+        return self.make_outputs(dataset, data=outputs, jobs=job)
 
 
 @stage.stage
