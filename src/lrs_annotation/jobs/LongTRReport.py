@@ -3,8 +3,6 @@ Jobs to screen a LongTR VCF against STRchive disease loci
 and produce standalone HTML reports, optionally subset by loci list.
 """
 
-import json
-
 from hailtop.batch.job import Job
 
 from cpg_utils import Path, config, hail_batch
@@ -63,37 +61,4 @@ def longtr_pathogenic_report(
             batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
             batch_instance.write_output(json_rg, str(outputs[f'{list_name}_json']))
 
-    return job
-
-
-def longtr_index_page(
-    dataset_name: str,
-    manifest_data: list[dict],
-    loci_lists: dict[str, list[str]],
-    output_path: Path,
-    job_attrs: dict[str, str],
-) -> Job:
-    """
-    Generate an index HTML page linking to all LongTR pathogenic reports for a dataset.
-    """
-    from lrs_annotation.scripts import longtr_index  # noqa: PLC0415
-
-    batch_instance = hail_batch.get_batch()
-
-    job = batch_instance.new_job(f'LongTR Index Page for {dataset_name}', job_attrs | {'tool': 'longtr_index'})
-    job.image(config.config_retrieve(['workflow', 'driver_image']))
-
-    manifest = {'reports': manifest_data, 'loci_lists': loci_lists}
-    job.command(f"""
-    cat > {job.manifest} << 'MANIFEST_EOF'
-{json.dumps(manifest, indent=2)}
-MANIFEST_EOF
-
-    python3 {longtr_index.__file__} \\
-        --manifest {job.manifest} \\
-        --dataset '{dataset_name}' \\
-        --output {job.output}
-    """)
-
-    batch_instance.write_output(job.output, str(output_path))
     return job

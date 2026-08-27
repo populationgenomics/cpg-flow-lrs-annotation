@@ -246,7 +246,7 @@ def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int
         return []
     ref_repeat_bp = vcf_end - vcf_start + 1
     ref_copies = ref_repeat_bp / period
-    read_alleles = []
+    read_alleles: list[float] = []
     for token in allreads_str.split(';'):
         parts = token.strip().split('|')
         if not parts[0]:
@@ -730,8 +730,13 @@ def cli_main():
             loci_set = {lid.strip() for lid in args.loci_list.split(',')}
 
     generate_report(
-        args.vcf_path, args.strchive_json, args.longtr_bed,
-        args.output_html, args.output_json, args.report_type, loci_set,
+        args.vcf_path,
+        args.strchive_json,
+        args.longtr_bed,
+        args.output_html,
+        args.output_json,
+        args.report_type,
+        loci_set,
     )
 
 

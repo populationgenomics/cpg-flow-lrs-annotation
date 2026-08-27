@@ -60,8 +60,8 @@ def build_entries_from_reports(report_items: list[dict]) -> list[IndexEntry]:
         entries.append(
             IndexEntry(
                 sample=item['sample'],
-                family=item.get('family', ''),
-                ext_participant=item.get('ext_participant', ''),
+                family=item.get('family_id', item.get('family', '')),
+                ext_participant=item.get('external_id', item.get('ext_participant', '')),
                 ext_sample=item.get('ext_sample', ''),
                 affected_status=item.get('affected_status', ''),
                 report_type=re.sub(r'[-_]', ' ', item.get('report_type', 'default')).title(),
