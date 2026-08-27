@@ -47,7 +47,7 @@ def longtr_pathogenic_report(
         for list_name, loci in loci_lists.items():
             html_rg = job[f'{list_name}_html']
             json_rg = job[f'{list_name}_json']
-            loci_str = ','.join(loci)
+            loci_str = ' '.join(loci)
             job.command(f"""
     python3 {longtr_pathogenic.__file__} \\
         --vcf_path {local_vcf} \\

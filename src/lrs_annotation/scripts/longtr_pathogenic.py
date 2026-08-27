@@ -718,16 +718,10 @@ def cli_main():
     parser.add_argument('--output_html', default='longtr_pathogenic.html', help='Output HTML file')
     parser.add_argument('--output_json', default='longtr_pathogenic.json', help='Output JSON file')
     parser.add_argument('--report_type', default='default', help='Report type label (e.g., default, paediatric)')
-    parser.add_argument('--loci_list', help='Locus IDs to include: comma-separated or path to file (one per line)')
+    parser.add_argument('--loci_list', help='Locus IDs to include', nargs='+')
     args = parser.parse_args()
 
-    loci_set = None
-    if args.loci_list:
-        loci_path = Path(args.loci_list)
-        if loci_path.is_file():
-            loci_set = {line.strip() for line in loci_path.read_text().splitlines() if line.strip()}
-        else:
-            loci_set = {lid.strip() for lid in args.loci_list.split(',')}
+    loci_set = set(args.loci_list) if args.loci_list else None
 
     generate_report(
         args.vcf_path,
