@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{dataset}} — LongTR Reports Dashboard</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/css/theme.bootstrap_4.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+
+    <style>
+      a { text-decoration: none; }
+      td, th { text-align: left; vertical-align: top; }
+      .container { max-width: 80vw; display: block; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+      .loci-cell {
+        cursor: pointer; transition: all 0.3s ease;
+        height: 30px; width: 120px; display: inline-block;
+        background-color: #888; padding: 4px; border-radius: 4px;
+        color: transparent; overflow: hidden;
+      }
+      .loci-cell * { visibility: hidden; }
+      .loci-cell.revealed {
+        background-color: transparent; color: inherit;
+        height: auto; width: auto; overflow: visible;
+      }
+      .loci-cell.revealed * { visibility: visible; }
+      .loci-column-hidden { display: none; }
+      .d-none { display: none !important; }
+      #report-table th:last-child, #report-table td:last-child { text-align: center; }
+      .blur-btn-hidden { display: none !important; }
+      #affectedStatusDropdown {
+        width: 100%; padding: 4px 6px; border: 1px solid #767676;
+        border-radius: 3px; font-size: 12px; height: 28px;
+        box-sizing: border-box; background-color: #fff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <nav class="navbar navbar-dark bg-dark justify-content-start">
+      <a class="navbar-brand p-3" href="#">{{dataset}} — LongTR Reports Dashboard</a>
+    </nav>
+
+    <div class="container">
+      <div class="mt-4 mb-5">
+        <div class="alert alert-info shadow-sm d-flex align-items-center mb-4" role="alert">
+          <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+          <div class="mb-0">
+            Click <button class="btn btn-success btn-sm mx-1">Open</button> to view the full LongTR pathogenic TR expansion report for a sample.
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-header bg-primary text-white d-flex align-items-center">
+                <i class="bi bi-eye-fill me-2"></i>
+                <h5 class="card-title mb-0">Loci of Interest</h5>
+              </div>
+              <div class="card-body bg-light">
+                <p class="card-text text-muted mb-3">
+                  Hidden by default. Displays flagged loci for each sample. Colour indicates significance:
+                </p>
+                <div class="d-flex flex-wrap gap-2 mb-4 justify-content-center">
+                  <span class="badge rounded-pill" style="background-color: Red; color: white;">Pathogenic</span>
+                  <span class="badge rounded-pill" style="background-color: Orange; color: white;">Intermediate</span>
+                  <span class="badge rounded-pill" style="background-color: Grey; color: white;">Uncertain</span>
+                </div>
+                <ul class="list-group list-group-flush mb-4 shadow-sm rounded">
+                  <li class="list-group-item bg-white d-flex flex-column gap-2 text-center align-items-center">
+                    <button class="btn btn-secondary">Show Loci of Interest</button>
+                    <small class="text-muted">Reveals the column. Values are initially hidden. Click a cell to reveal.</small>
+                  </li>
+                  <li class="list-group-item bg-white d-flex flex-column gap-2 text-center align-items-center">
+                    <button class="btn btn-danger">Unblur All Loci</button>
+                    <small class="text-muted">Reveals all values and shows a filter to hide specific loci.</small>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-header bg-secondary text-white d-flex align-items-center">
+                <i class="bi bi-clipboard-x me-2"></i>
+                <h5 class="card-title mb-0">Missing Loci</h5>
+              </div>
+              <div class="card-body bg-light d-flex flex-column">
+                <p class="card-text text-muted mb-4">
+                  Shows loci present in the panel but absent from LongTR genotyping for a sample.
+                </p>
+                <div class="alert bg-white border mb-4 p-3 rounded shadow-sm d-flex align-items-start" role="alert">
+                  <i class="bi bi-lightbulb-fill text-warning fs-4 me-3 mt-1"></i>
+                  <div class="small">
+                    <strong>Why does this happen?</strong><br>
+                    The LongTR VCF may not contain all disease-associated loci if the region had insufficient coverage.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if loci_lists %}
+      <div style="text-align: center;">
+        <button id="toggleButton" class="btn btn-success" onclick="toggleRefTable()">
+          Show Report Loci Reference Table
+        </button>
+      </div>
+      <br>
+      <div id="lociTableContainer" style="display: none;">
+        <table class="table tablesorter" id="loci-table">
+          <thead>
+            <tr>
+              <th>Report Type</th>
+              <th>Total Loci</th>
+              <th>Full Loci List</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for list_name, loci in loci_lists.items() %}
+            <tr>
+              <td><strong>{{ list_name | replace('_', ' ') | title }}</strong></td>
+              <td>{{ loci | length }}</td>
+              <td>{{ loci | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <main class="container mt-4 mb-4">
+      <div class="d-flex justify-content-center gap-2 mb-3">
+        <button id="toggleLociColumn" class="btn btn-secondary" onclick="toggleLociColumn()">
+          Show Loci of Interest
+        </button>
+        <button id="toggleBlurBtn" class="btn btn-danger blur-btn-hidden" onclick="toggleBlurAllLoci()">
+          Unblur All Loci
+        </button>
+        <div id="locusFilterContainer" class="dropdown d-none">
+          <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Hide Loci...
+          </button>
+          <ul id="locusFilterDropdown" class="dropdown-menu" style="max-height: 250px; overflow-y: auto;"></ul>
+        </div>
+      </div>
+
+      <table class="table tablesorter" id="report-table">
+        <thead>
+          <tr>
+            <th class="group-false">Sample</th>
+            <th class="group-false">Family</th>
+            <th class="group-false">Ext.ID</th>
+            <th class="group-false">Ext.Sample</th>
+            <th class="group-false">Affected Status</th>
+            <th class="group-false">Report Type</th>
+            <th class="group-false sorter-shortDate" data-date-format="yyyy-mm-dd">Date</th>
+            <th class="group-false">Missing Loci</th>
+            <th class="group-false loci-column loci-column-hidden">Loci of Interest</th>
+            <th class="group-false">Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for report in reports %}
+          <tr>
+            <td>{{report.sample}}</td>
+            <td>{{report.family}}</td>
+            <td>{{report.ext_participant}}</td>
+            <td>{{report.ext_sample}}</td>
+            <td>{{report.affected_status}}</td>
+            <td>{{report.report_type}}</td>
+            <td>{{report.run_date}}</td>
+            <td>{{report.missing_loci}}</td>
+            <td class="loci-column loci-column-hidden">
+              <div class="loci-cell">
+                {% if report.loci_of_interest %}
+                {% for color, loci in report.loci_of_interest.items() %}
+                {% for locus in loci %}
+                <span class="locus-tag" data-locus="{{locus}}" style="background-color: {{color}}; padding: 2px 6px; border-radius: 3px; margin: 2px; display: inline-block;">{{locus}}</span>
+                {% endfor %}
+                {% endfor %}
+                {% else %}
+                <span style="color: #ccc;">&mdash;</span>
+                {% endif %}
+              </div>
+            </td>
+            <td><button class="btn btn-success btn-sm" onclick="window.open('{{report.url}}', '_blank')">Open</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/js/jquery.tablesorter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/js/jquery.tablesorter.widgets.min.js"></script>
+
+    <script>
+      $(document).ready(function() {
+        $("#report-table").tablesorter({
+          theme: "bootstrap",
+          sortList: [[0,0]],
+          widgets: ["zebra", "filter", "columns"],
+          widgetOptions: {
+            columns: ["", ""],
+            filter_functions: { 4: true }
+          }
+        });
+
+        setTimeout(function() {
+          var filterRow = document.querySelector('#report-table .tablesorter-filter-row');
+          if (filterRow) {
+            if (filterRow.cells[8]) filterRow.cells[8].style.display = 'none';
+            if (filterRow.cells[4]) {
+              var cell = filterRow.cells[4];
+              var originalInput = cell.querySelector('input');
+              if (originalInput) {
+                originalInput.style.display = 'none';
+                var dropdown = document.createElement('select');
+                dropdown.id = 'affectedStatusDropdown';
+                dropdown.className = 'form-select form-select-sm';
+                dropdown.onchange = function() { filterByAffectedStatus(this.value); };
+                [['', 'All'], ['Affected', 'Affected'], ['Unaffected', 'Unaffected']].forEach(function(opt) {
+                  var o = document.createElement('option');
+                  o.value = opt[0]; o.textContent = opt[1];
+                  dropdown.appendChild(o);
+                });
+                cell.insertBefore(dropdown, originalInput);
+              }
+            }
+          }
+        }, 100);
+
+        $(".loci-cell").click(function() {
+          $(this).toggleClass("revealed");
+          updateBlurButtonState();
+        });
+        populateLocusFilter();
+      });
+
+      function updateBlurButtonState() {
+        var cells = document.querySelectorAll('.loci-cell');
+        var button = document.getElementById('toggleBlurBtn');
+        var anyRevealed = Array.from(cells).some(function(c) { return c.classList.contains('revealed'); });
+        button.textContent = anyRevealed ? 'Re-blur All Loci' : 'Unblur All Loci';
+        updateFilterVisibility();
+      }
+
+      function updateFilterVisibility() {
+        var cells = document.querySelectorAll('.loci-cell');
+        var columns = document.querySelectorAll('.loci-column');
+        var filterContainer = document.getElementById('locusFilterContainer');
+        var allRevealed = Array.from(cells).every(function(c) { return c.classList.contains('revealed'); });
+        var columnVisible = !columns[0].classList.contains('loci-column-hidden');
+        if (allRevealed && columnVisible) {
+          filterContainer.classList.remove('d-none');
+        } else {
+          filterContainer.classList.add('d-none');
+        }
+      }
+
+      function toggleRefTable() {
+        var container = document.getElementById('lociTableContainer');
+        var button = document.getElementById('toggleButton');
+        if (container.style.display === 'none') {
+          container.style.display = 'block';
+          button.textContent = 'Hide Report Loci Reference Table';
+        } else {
+          container.style.display = 'none';
+          button.textContent = 'Show Report Loci Reference Table';
+        }
+      }
+
+      function populateLocusFilter() {
+        var locusCounts = {};
+        document.querySelectorAll('.locus-tag').forEach(function(tag) {
+          var locus = tag.dataset.locus;
+          if (locus) locusCounts[locus] = (locusCounts[locus] || 0) + 1;
+        });
+        var sorted = Object.keys(locusCounts).sort();
+        var dropdown = document.getElementById('locusFilterDropdown');
+        sorted.forEach(function(locus) {
+          var li = document.createElement('li');
+          var label = document.createElement('label');
+          label.className = 'dropdown-item'; label.style.cursor = 'pointer';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.className = 'form-check-input me-2';
+          cb.value = locus; cb.onchange = filterByLocus;
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(locus + ' (' + locusCounts[locus] + ')'));
+          li.appendChild(label); dropdown.appendChild(li);
+        });
+      }
+
+      function filterByLocus() {
+        var checked = document.querySelectorAll('#locusFilterDropdown input[type="checkbox"]:checked');
+        var selected = Array.from(checked).map(function(cb) { return cb.value; });
+        document.querySelectorAll('.locus-tag').forEach(function(tag) {
+          tag.style.display = selected.includes(tag.dataset.locus) ? 'none' : 'inline-block';
+        });
+      }
+
+      function toggleLociColumn() {
+        var columns = document.querySelectorAll('.loci-column');
+        var filterRow = document.querySelector('#report-table .tablesorter-filter-row');
+        var button = document.getElementById('toggleLociColumn');
+        var blurBtn = document.getElementById('toggleBlurBtn');
+        var isHidden = columns[0].classList.contains('loci-column-hidden');
+        columns.forEach(function(col) {
+          if (isHidden) col.classList.remove('loci-column-hidden');
+          else col.classList.add('loci-column-hidden');
+        });
+        if (filterRow && filterRow.cells[8]) {
+          filterRow.cells[8].style.display = isHidden ? '' : 'none';
+        }
+        button.textContent = isHidden ? 'Hide Loci of Interest' : 'Show Loci of Interest';
+        if (blurBtn) {
+          if (isHidden) blurBtn.classList.remove('blur-btn-hidden');
+          else blurBtn.classList.add('blur-btn-hidden');
+        }
+        updateFilterVisibility();
+      }
+
+      function toggleBlurAllLoci() {
+        var cells = document.querySelectorAll('.loci-cell');
+        var button = document.getElementById('toggleBlurBtn');
+        var anyRevealed = Array.from(cells).some(function(c) { return c.classList.contains('revealed'); });
+        if (anyRevealed) {
+          cells.forEach(function(c) { c.classList.remove('revealed'); });
+          button.textContent = 'Unblur All Loci';
+        } else {
+          if (confirm('Warning: This will reveal all Loci of Interest data for all samples. Continue?')) {
+            cells.forEach(function(c) { c.classList.add('revealed'); });
+            button.textContent = 'Re-blur All Loci';
+          }
+        }
+        updateFilterVisibility();
+      }
+
+      function filterByAffectedStatus(status) {
+        var filterRow = document.querySelector('#report-table .tablesorter-filter-row');
+        if (filterRow && filterRow.cells[4]) {
+          var input = filterRow.cells[4].querySelector('input[type="search"]');
+          if (input) { input.value = status; $(input).trigger('search'); }
+        }
+      }
+    </script>
+  </body>
+</html>
