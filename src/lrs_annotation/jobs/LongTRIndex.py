@@ -120,14 +120,16 @@ def longtr_index_page(
                 continue
             report_type = key.removesuffix('_html') if key != 'html' else 'default'
             url = str(report_path).replace(file_prefix, html_prefix)
-            manifest_data.append({
-                'sample': sg_id,
-                'family_id': family_id,
-                'external_id': external_id,
-                'affected_status': affected_status,
-                'report_type': report_type,
-                'url': url,
-            })
+            manifest_data.append(
+                {
+                    'sample': sg_id,
+                    'family_id': family_id,
+                    'external_id': external_id,
+                    'affected_status': affected_status,
+                    'report_type': report_type,
+                    'url': url,
+                }
+            )
 
     manifest = {'reports': manifest_data, 'loci_lists': loci_lists}
     job.command(f"""
