@@ -2,16 +2,16 @@
 Workflow for annotating long-read SNPs and Indels data into a seqr-ready format.
 """
 
-from cpg_flow import stage, targets, workflow
-from cpg_flow.utils import tshirt_mt_sizing
-from cpg_flow.workflow import get_multicohort
-from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve
-from cpg_utils.hail_batch import get_batch
 from google.api_core.exceptions import PermissionDenied
-from inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from loguru import logger
 
+from cpg_flow import stage, targets, workflow
+from cpg_flow.workflow import get_multicohort
+from cpg_utils import Path, to_path
+from cpg_utils.config import config_retrieve, dataset_for_access_level
+from cpg_utils.hail_batch import get_batch
+
+from lrs_annotation.inputs import get_sgs_from_datasets, query_for_lrs_mappings, query_for_lrs_vcfs
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.snps_indels import (
     AnnotateCohortMatrixtable,
@@ -27,8 +27,10 @@ from lrs_annotation.utils import (
     get_dataset_names,
     get_family_sequencing_groups,
     get_query_filter_from_config,
+    get_sg_vcfs_file_path,
     joint_calling_scatter_count,
     write_mapping_to_file,
+    write_to_json,
 )
 
 
@@ -53,8 +55,8 @@ class WriteLrsIdToSgIdMappingFile(stage.MultiCohortStage):
 
         lrs_mapping = query_for_lrs_mappings(
             dataset_names=get_dataset_names([d.name for d in multicohort.get_datasets()]),
-            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),
-            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),
+            sequencing_types=get_query_filter_from_config('sequencing_types', make_tuple=False),  # type: ignore[arg-type]
+            sequencing_platforms=get_query_filter_from_config('sequencing_platforms', make_tuple=False),  # type: ignore[arg-type]
         )
         lrs_sg_id_mapping = {lrs_id: mapping['sg_id'] for lrs_id, mapping in lrs_mapping.items()}
 
@@ -71,25 +73,32 @@ class ModifyVcf(stage.SequencingGroupStage):
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'snps_indels' / 'reformatted_vcfs'
+        """
+        The modified VCFs and indexes are written to temp storage with the same filename as the original VCF
+        """
+        sgid_prefix = sequencing_group.dataset.tmp_prefix() / 'reformatted_vcfs' / 'snps_indels'
+        _, sg_vcfs = query_for_lrs_vcfs(dataset_name=sequencing_group.dataset.name)
+        if sequencing_group.id not in sg_vcfs:
+            return {}
+        vcf_filename = to_path(sg_vcfs[sequencing_group.id]['vcf']).name.replace('.vcf.gz', '_reformatted.vcf.gz')
         return {
-            'vcf': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz',
-            'index': sgid_prefix / f'{sequencing_group.id}_reformatted.vcf.gz.tbi',
+            'vcf': sgid_prefix / f'{vcf_filename}',
+            'index': sgid_prefix / (vcf_filename + '.tbi'),
         }
 
-    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+    def queue_jobs(self, sg: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         - Use bcftools job to reheader the VCF with the replacement sample IDs, normalise it, and then sort
         - Then block-gzip and index it
         - This is explicitly skipped for the parents in trio joint-called VCFs
         """
         multicohort_datasets = [ds.name for ds in get_multicohort().get_datasets()]
-        sg_ids = []
-        sg_vcfs = {}
+        sg_ids: list[str] = []
+        sg_vcfs: dict[str, dict] = {}
         for ds in multicohort_datasets:
-            sgs = query_for_lrs_vcfs(dataset_name=ds)
-            sg_ids.extend(sgs['sg_ids'])
-            sg_vcfs.update(sgs['vcfs'])
+            query_sg_ids, query_vcfs = query_for_lrs_vcfs(dataset_name=ds)
+            sg_ids.extend(query_sg_ids)
+            sg_vcfs.update(query_vcfs)
 
         assert not set(get_multicohort().get_sequencing_group_ids()) - set(sg_ids), (
             'SGs in the multicohort do not have VCFs matching the filter criteria: '
@@ -116,6 +125,21 @@ class ModifyVcf(stage.SequencingGroupStage):
         outputs = self.expected_outputs(sg)
         get_batch().write_output(reformatting_job.vcf_out, str(outputs['vcf']).removesuffix('.vcf.gz'))
 
+        # Write out the VCFs for this multicohort
+        sg_vcfs_file = get_sg_vcfs_file_path()
+        if not sg_vcfs_file.exists():
+            logger.info(f'Writing input VCFs to {sg_vcfs_file}')
+            sg_vcfs_to_write = {
+                sg.id: {
+                    'original_vcf': str(sg_vcfs[sg.id]['vcf']),
+                    'reformatted_vcf': str(self.expected_outputs(sg)['vcf']),
+                    'meta': sg_vcfs[sg.id]['meta'],
+                }
+                for sg in get_multicohort().get_sequencing_groups()
+                if sg.id in sg_vcfs
+            }
+            write_to_json(sg_vcfs_to_write, sg_vcfs_file)
+
         return self.make_outputs(target=sg, jobs=[reformatting_job], data=outputs)
 
 
@@ -135,11 +159,10 @@ class MergeVcfsWithBcftools(stage.MultiCohortStage):
         """
         Use bcftools to merge all the VCFs, and then fill in the tags (requires bcftools 1.18+)
         """
-        sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
+        _, sgs = get_sgs_from_datasets([d.name for d in multicohort.get_datasets()])
 
         # Get the reformatted VCFs from the previous stage
-        reformatted_vcfs = inputs.as_dict_by_target(ModifyVcf)
-        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in reformatted_vcfs.items() if sg_id in sgs['vcfs']}
+        reformatted_vcfs = {sg_id: vcf for sg_id, vcf in inputs.as_dict_by_target(ModifyVcf).items() if sg_id in sgs}
 
         if len(reformatted_vcfs) == 1:
             logger.info('Only one VCF found, skipping merge')
@@ -201,9 +224,14 @@ class ExportSnpsIndelsVcfToMt(stage.DatasetStage):
         else:
             vcf_path = inputs.as_path(mc, MergeVcfsWithBcftools, 'vcf')
 
+        sg_ids, _ = get_sgs_from_datasets([dataset.name])
+
         outputs = self.expected_outputs(dataset)
 
         job = VcfToUnannotatedMt.vcf_to_unannotated_mt_job(
+            dataset=dataset_for_access_level(dataset.name),
+            sg_ids=sg_ids,
+            input_vcfs_file_path=get_sg_vcfs_file_path(),
             vcf_path=vcf_path,
             out_mt_path=outputs['mt'],
             job_attrs=self.get_job_attrs(dataset),
@@ -344,7 +372,7 @@ class AnnotateCohortMtFromVcfWithHail(stage.MultiCohortStage):
         return self.make_outputs(multicohort, data=outputs, jobs=job)
 
 
-@stage.stage(required_stages=[AnnotateCohortMtFromVcfWithHail], analysis_type='matrixtable', analysis_keys=['mt'])
+@stage.stage(required_stages=[AnnotateCohortMtFromVcfWithHail])
 class SubsetMtToDatasetWithHail(stage.DatasetStage):
     """
     Subset the multicohort Matrixtable to a single dataset
@@ -383,7 +411,8 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         if family_sgs := get_family_sequencing_groups(dataset):
             sg_ids = family_sgs['family_sg_ids']
         else:
-            sg_ids = dataset.get_sequencing_group_ids()
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortMtFromVcfWithHail, key='mt')
 
@@ -393,9 +422,11 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
-            mt_path=mt_path,
+            dataset=dataset_for_access_level(dataset.name),
             sg_ids=sg_ids,
+            mt_path=mt_path,
             out_mt_path=outputs['mt'],
+            input_vcfs_file_path=get_sg_vcfs_file_path(),
             tmp_prefix=checkpoint_prefix,
             job_attrs=self.get_job_attrs(dataset),
         )
@@ -403,12 +434,7 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=[SubsetMtToDatasetWithHail],
-    analysis_type='es-index',
-    analysis_keys=['done_flag'],
-    update_analysis_meta=lambda x: {'seqr-dataset-type': 'SNV_INDEL'},  # noqa: ARG005
-)
+@stage.stage(required_stages=[SubsetMtToDatasetWithHail])
 class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
     """
     Create a Seqr index
@@ -457,22 +483,23 @@ class ExportSnpsIndelsMtToESIndex(stage.DatasetStage):
 
         # get the expected outputs as Strings
         index_name = outputs['index_name']
-        flag_name = str(outputs['done_flag'])
-        # and just the name, used after localisation
-        mt_name = mt_path.split('/')[-1]
+        done_flag = str(outputs['done_flag'])
 
-        req_storage = tshirt_mt_sizing(
-            sequencing_type=config_retrieve(['workflow', 'sequencing_type']),
-            cohort_size=len(get_sgs_from_datasets([dataset.name])),
-        )
+        if family_sgs := get_family_sequencing_groups(dataset):
+            sg_ids = family_sgs['family_sg_ids']
+        else:
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
+
         # set all job attributes in one bash
         job = export_mt_to_elasticsearch(
             batch=get_batch(),
+            dataset=dataset_for_access_level(dataset.name),
+            sg_ids=sg_ids,
             mt_path=mt_path,
             index_name=index_name,
-            flag_name=flag_name,
-            req_storage=req_storage,
-            job_name=f'Export {index_name} from {mt_name}',
+            done_flag=done_flag,
+            input_vcfs_file_path=get_sg_vcfs_file_path(),
             job_attrs=self.get_job_attrs(dataset),
         )
 

@@ -1,10 +1,11 @@
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+
 from cpg_flow.resources import STANDARD, storage_for_joint_vcf
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command
-from hailtop.batch.job import Job
 
 
 def gather_vcfs(

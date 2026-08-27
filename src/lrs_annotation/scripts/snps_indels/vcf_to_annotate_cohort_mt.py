@@ -4,11 +4,13 @@ Hail Query functions for seqr loader.
 
 from argparse import ArgumentParser
 
+from loguru import logger
+
 import hail as hl
+
 from cpg_flow.utils import checkpoint_hail
 from cpg_utils.config import config_retrieve, reference_path
 from cpg_utils.hail_batch import genome_build, init_batch
-from loguru import logger
 
 from lrs_annotation.hail_scripts.computed_fields import variant_id, vep
 from lrs_annotation.utils import get_init_batch_args_for_job
@@ -37,6 +39,7 @@ def annotate_cohort(
         skip_invalid_loci=True,
         force_bgz=True,
         array_elements_required=False,
+        min_partitions=config_retrieve(['workflow', 'import_vcf_min_partitions'], 50),
     )
     mt.checkpoint(output=str(checkpoint_prefix) + 'mt-imported.mt', overwrite=True)
     logger.info(f'Imported VCF {vcf_path} as {mt.n_partitions()} partitions')

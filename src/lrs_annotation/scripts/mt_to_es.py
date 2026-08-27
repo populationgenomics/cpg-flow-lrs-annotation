@@ -11,11 +11,14 @@ from argparse import ArgumentParser
 from io import StringIO
 
 import elasticsearch
+from loguru import logger
+
 import hail as hl
+
 from cpg_utils import to_path
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import config_retrieve
-from loguru import logger
+from cpg_utils.metamist_registration import create_new
 
 # CONSTANTS stolen from https://github.com/broadinstitute/seqr-loading-pipelines/blob/c113106204165e22b7a8c629054e94533615e7d2/hail_scripts/elasticsearch/elasticsearch_utils.py#L13
 # make encoded values as human-readable as possible
@@ -198,6 +201,21 @@ class ElasticsearchClient:
                 # this is used in seqr-loading-pipelines, but not writing these would
                 # result in a much smaller index
                 'es.spark.dataframe.write.null': 'true',
+                # --- connection robustness for long WAN exports to Elastic Cloud ---
+                # Elastic Cloud sits behind a proxy/LB that drops long or idle
+                # connections. On defaults (1m timeout, 3 retries) a transient blip
+                # over a multi-hour export throws EsHadoopNoNodesLeftException and,
+                # because Spark local mode does not retry tasks, aborts everything.
+                # These settings let each partition ride out network interruptions.
+                'es.http.timeout': '5m',  # per-request HTTP timeout (default 1m)
+                'es.http.retries': '10',  # retries per broken HTTP connection (default 3)
+                'es.batch.write.retry.count': '-1',  # retry bulk writes indefinitely (default 3)
+                'es.batch.write.retry.wait': '30s',  # backoff between bulk retries (default 10s)
+                # We already set index.refresh_interval=-1 on the mapping and
+                # forcemerge at the end, so the connector's per-partition refresh
+                # at task close is a redundant network round-trip and a common
+                # point of failure. Skip it.
+                'es.batch.write.refresh': 'false',
                 # We are not explicitly indexing the ES Index on varianId at this time
                 # we should probably investigate this in future, but if we index on variantId
                 # we run into the possibility that gCNV (currently multiple separate indices)
@@ -244,9 +262,12 @@ class ElasticsearchClient:
 
 def main():
     parser = ArgumentParser(description='Argument Parser for the ES generation script')
+    parser.add_argument('--dataset', help='Dataset name', required=True)
+    parser.add_argument('--sg_ids', nargs='+', help='Whitespace-separated list of SG IDs', required=True)
     parser.add_argument('--mt_path', help='MT path name', required=True)
     parser.add_argument('--index', help='ES index name', required=True)
-    parser.add_argument('--flag', help='ES index "DONE" file path')
+    parser.add_argument('--done_flag', help='ES index "DONE" file path', required=True)
+    parser.add_argument('--path_to_input_vcfs_file', help='Path to the input VCFs file', required=True)
     args = parser.parse_args()
 
     password: str | None = read_secret(
@@ -296,8 +317,28 @@ def main():
     if es_shards < shard_threshold:
         es_client.wait_for_shard_transfer(args.index)
 
-    with to_path(args.flag).open('w') as f:
+    with to_path(args.done_flag).open('w') as f:
         f.write('done')
+
+    seqr_dataset_type = config_retrieve(['workflow', 'seqr_dataset_type'], 'SNV_INDEL')
+    meta = {
+        'stage': 'ExportSnpsIndelsMtToESIndex' if seqr_dataset_type == 'SNV_INDEL' else 'ExportSVsMtToElasticIndex',
+        'sequencing_type': config_retrieve(['workflow', 'sequencing_type'], 'genome'),
+        'sequencing_technology': config_retrieve(['workflow', 'sequencing_technology'], 'long-read'),
+        'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
+        'seqr-dataset-type': seqr_dataset_type,
+        'input_vcfs': args.path_to_input_vcfs_file,
+    }
+
+    create_new(
+        project=args.dataset,
+        output=args.done_flag,
+        analysis_type='es-index',
+        sgs=args.sg_ids,
+        meta=meta,
+        secondary={'inputs': args.path_to_input_vcfs_file},
+    )
+    logger.info(f'Registered es-index analysis for dataset {args.dataset}')
 
 
 def elasticsearch_row(mt: hl.MatrixTable):

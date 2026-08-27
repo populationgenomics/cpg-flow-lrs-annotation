@@ -2,17 +2,19 @@
 Convert BAM to CRAM.
 """
 
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
+
 from cpg_flow.resources import STANDARD
 from cpg_utils import to_path
 from cpg_utils.config import config_retrieve, image_path, reference_path
 from cpg_utils.hail_batch import Batch, command
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
 
 
 def bam_to_cram(
     b: Batch,
     input_bam: ResourceGroup,
+    outputs: dict[str, str],
     job_attrs: dict | None = None,
 ) -> Job:
     """
@@ -38,7 +40,7 @@ def bam_to_cram(
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
-        ncpu=config_retrieve(['resource_overrides', 'bam_to_cram', 'cpu_cores'], 1),
+        ncpu=config_retrieve(['workflow', 'resource_overrides', 'bam_to_cram', 'cpu_cores'], 1),
         storage_gb=config_retrieve(['workflow', 'resource_overrides', 'bam_to_cram', 'storage_gib'], 50),
     )
 
@@ -50,9 +52,10 @@ def bam_to_cram(
     )
 
     cmd = f"""
-    samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} | \
-    tee {j.sorted_cram['cram']} | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram['cram.crai']}
+    samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} \
+    --write-index -O cram,version=3.0 -o {j.sorted_cram.cram}
     """
     j.command(command(cmd, monitor_space=True))
 
+    b.write_output(j.sorted_cram, str(outputs['cram']).removesuffix('.cram'))
     return j

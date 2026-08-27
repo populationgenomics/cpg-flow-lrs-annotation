@@ -1,15 +1,22 @@
 from argparse import ArgumentParser
 
-import hail as hl
-from cpg_utils.hail_batch import init_batch
 from loguru import logger
+
+import hail as hl
+
+from cpg_utils.config import config_retrieve
+from cpg_utils.hail_batch import init_batch
+from cpg_utils.metamist_registration import create_new
 
 from lrs_annotation.utils import get_init_batch_args_for_job
 
 
-def annotate_dataset_mt(mt_path: str, out_mt_path: str):
+def annotate_dataset_mt(
+    mt_path: str,
+    out_mt_path: str,
+):
     """
-    Add dataset-level annotations.
+    Add dataset-level annotations to the matrixtable and register the matrixtable in Metamist.
     """
     init_batch(**get_init_batch_args_for_job('annotate_dataset_snps_indels'))
     mt = hl.read_matrix_table(mt_path)
@@ -104,8 +111,11 @@ def cli_main():
     """
 
     parser = ArgumentParser()
+    parser.add_argument('--dataset', type=str, required=True, help='Name of the dataset')
+    parser.add_argument('--sg_ids', nargs='+', required=True, help='List of sequencing group IDs to subset')
     parser.add_argument('--mt_path', type=str, required=True, help='Path to the input MatrixTable file')
     parser.add_argument('--out_mt_path', type=str, required=True, help='Path to write the output MatrixTable file')
+    parser.add_argument('--path_to_input_vcfs_file', type=str, required=True, help='Path to the input VCFs file')
 
     args = parser.parse_args()
 
@@ -113,6 +123,25 @@ def cli_main():
         mt_path=args.mt_path,
         out_mt_path=args.out_mt_path,
     )
+
+    meta = {
+        'stage': 'SubsetMtToDatasetWithHail',
+        'sequencing_type': config_retrieve(['workflow', 'sequencing_type'], 'genome'),
+        'sequencing_technology': config_retrieve(['workflow', 'sequencing_technology'], 'long-read'),
+        'query_filters': config_retrieve(['workflow', 'query_filters'], {}),
+        'seqr-dataset-type': config_retrieve(['workflow', 'seqr_dataset_type'], 'SNV_INDEL'),
+        'input_vcfs': args.path_to_input_vcfs_file,
+    }
+
+    create_new(
+        project=args.dataset,
+        output=args.out_mt_path,
+        analysis_type='matrixtable',
+        sgs=args.sg_ids,
+        meta=meta,
+        secondary={'inputs': args.path_to_input_vcfs_file},
+    )
+    logger.info(f'Registered matrixtable analysis for dataset {args.dataset}')
 
 
 if __name__ == '__main__':
