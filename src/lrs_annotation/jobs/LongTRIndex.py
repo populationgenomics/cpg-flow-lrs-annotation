@@ -50,10 +50,12 @@ def get_sg_metadata(
     if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
         query_dataset += '-test'
 
+    prod_dataset = dataset.removesuffix('-test')
+
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
 
     project = result.get('project', {})
-    display_name = project.get('meta', {}).get('display_name', dataset)
+    display_name = project.get('meta', {}).get('display_name', prod_dataset)
 
     sg_metadata: dict[str, dict[str, str | int]] = {}
     for group in project.get('sequencingGroups', []):

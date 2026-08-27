@@ -51,7 +51,8 @@ def get_longtr_loci_lists(dataset: str) -> dict[str, list[str]]:
     if not loci_list_datasets:
         return loci_lists
 
-    in_scope = [ll_name for ll_name, datasets in loci_list_datasets.items() if dataset in datasets]
+    prod_dataset = dataset.removesuffix('-test')
+    in_scope = [ll_name for ll_name, datasets in loci_list_datasets.items() if prod_dataset in datasets]
     return {ll_name: loci for ll_name, loci in loci_lists.items() if ll_name in in_scope}
 
 
