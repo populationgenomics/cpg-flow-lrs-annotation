@@ -40,6 +40,22 @@
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;
             font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 
+  .evidence-badge { font-size: 0.65rem; padding: 1px 7px; border-radius: 8px; font-weight: 600;
+                     text-transform: uppercase; letter-spacing: 0.3px; }
+  .evidence-Definitive { background: #155724; color: #fff; }
+  .evidence-Strong { background: #28a745; color: #fff; }
+  .evidence-Moderate { background: #007bff; color: #fff; }
+  .evidence-Provisional { background: #17a2b8; color: #fff; }
+  .evidence-Limited { background: #6c757d; color: #fff; }
+  .evidence-Disputed { background: #fd7e14; color: #fff; }
+  .evidence-Refuted { background: #dc3545; color: #fff; }
+
+  .external-links { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .external-links a { font-size: 0.72rem; color: #007bff; text-decoration: none; padding: 1px 6px;
+                       border: 1px solid #dee2e6; border-radius: 4px; transition: all 0.15s; }
+  .external-links a:hover { background: #007bff; color: #fff; border-color: #007bff; }
+  .external-links a::after { content: ' \2197'; font-size: 0.6rem; }
+
   .gauge-container { margin: 8px 0; }
   .gauge-svg { width: 100%; height: auto; }
   .gauge-placeholder { color: var(--muted); font-size: 0.8rem; font-style: italic; padding: 8px 0; }
@@ -52,11 +68,13 @@
   .card-details { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
   .detail { font-size: 0.78rem; color: var(--muted); }
 
-  .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   .filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px;
                  background: var(--card); cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
   .filter-btn:hover { background: #e9ecef; }
   .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .filter-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-right: 4px;
+                   display: flex; align-items: center; }
 
   .read-dots { margin-top: 2px; }
 
@@ -69,7 +87,21 @@
                 border: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
   .seq-label { font-size: 0.78rem; font-weight: 600; margin-top: 6px; }
   .motif-match { background: #d4edda; }
+  .motif-match + .motif-match { border-left: 2px solid rgba(0,0,0,0.3); }
   .motif-interrupt { background: #fff3cd; color: #856404; }
+
+  .glossary { margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .glossary summary { padding: 10px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+                       user-select: none; }
+  .glossary summary:hover { color: var(--text); }
+  .glossary[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 0; }
+  .glossary-content { padding: 12px 14px; }
+  .glossary-section { margin-bottom: 10px; }
+  .glossary-section:last-child { margin-bottom: 0; }
+  .glossary-section h3 { font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .glossary dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 0.78rem; margin: 0; }
+  .glossary dt { font-weight: 600; color: var(--text); }
+  .glossary dd { margin: 0; color: var(--muted); }
 
   @media (max-width: 600px) {
     .allele-row { flex-direction: column; align-items: flex-start; }
@@ -79,11 +111,64 @@
 </head>
 <body>
 
-<h1>Pathogenic TR Expansion Screen</h1>
+<h1>Pathogenic TR Expansion Screen{% if report_type and report_type != 'default' %} — {{ report_type | replace('_', ' ') | title }}{% endif %}</h1>
 <p class="subtitle">
   Sample: <strong>{{ sample_name }}</strong> ·
   {{ results | length }} STRchive disease loci · {{ n_genotyped }} genotyped
 </p>
+
+<details class="glossary">
+  <summary>Glossary &amp; external link guide</summary>
+  <div class="glossary-content">
+    <div class="glossary-section">
+      <h3>Per-locus metrics</h3>
+      <dl>
+        <dt>Depth (DP)</dt>
+        <dd>Number of reads used to call the genotype at this locus.</dd>
+        <dt>Q</dt>
+        <dd>Posterior probability of the unphased genotype (0&ndash;1; higher = more confident).</dd>
+        <dt>GT</dt>
+        <dd>Genotype call. Each number is an allele index; 0 = reference. Separator: / = unphased, | = phased.</dd>
+        <dt>GLDIFF</dt>
+        <dd>Genotype likelihood difference &mdash; log-likelihood gap between the best and second-best genotype. Higher values indicate a more confident call; &ldquo;.&rdquo; means indistinguishable.</dd>
+        <dt>Filter</dt>
+        <dd>LongTR per-sample filter status. PASS = no quality issues flagged.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Evidence levels (STRchive)</h3>
+      <dl>
+        <dt>Definitive</dt>
+        <dd>Strong, replicated evidence for disease association.</dd>
+        <dt>Strong / Moderate</dt>
+        <dd>Substantial evidence, possibly limited in replication or scope.</dd>
+        <dt>Provisional / Limited</dt>
+        <dd>Early or preliminary evidence; association not yet firmly established.</dd>
+        <dt>Disputed / Refuted</dt>
+        <dd>Evidence has been challenged or contradicted.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>External links</h3>
+      <dl>
+        <dt>OMIM</dt>
+        <dd>Online Mendelian Inheritance in Man &mdash; curated disease-gene relationships.</dd>
+        <dt>GeneReviews</dt>
+        <dd>Expert-authored clinical summaries of genetic conditions (NCBI).</dd>
+        <dt>gnomAD</dt>
+        <dd>Genome Aggregation Database &mdash; population allele-size distributions for STR loci.</dd>
+        <dt>STRipy</dt>
+        <dd>Short tandem repeat genotyping tool and database with population data.</dd>
+        <dt>MedGen</dt>
+        <dd>NCBI portal linking medical genetics information across sources.</dd>
+        <dt>GARD</dt>
+        <dd>Genetic and Rare Diseases Information Center (NIH).</dd>
+        <dt>Orphanet</dt>
+        <dd>European reference portal for rare diseases and orphan drugs.</dd>
+      </dl>
+    </div>
+  </div>
+</details>
 
 <div class="summary-grid">
   <div class="summary-card highlight-red"><div class="value">{{ n_pathogenic }}</div><div class="label">Pathogenic</div></div>
@@ -104,21 +189,34 @@
 </div>
 
 <div class="filter-bar">
-  <button class="filter-btn active" onclick="filterCards('all')">All ({{ results | length }})</button>
-  <button class="filter-btn" onclick="filterCards('pathogenic')">Pathogenic ({{ n_pathogenic }})</button>
-  <button class="filter-btn" onclick="filterCards('intermediate')">Intermediate ({{ n_intermediate }})</button>
-  <button class="filter-btn" onclick="filterCards('normal')">Normal ({{ n_normal }})</button>
-  <button class="filter-btn" onclick="filterCards('not-genotyped')">Not Genotyped ({{ n_missing }})</button>
+  <span class="filter-label">Status:</span>
+  <button class="filter-btn status-filter active" onclick="filterStatus('all')">All ({{ results | length }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('pathogenic')">Pathogenic ({{ n_pathogenic }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('intermediate')">Intermediate ({{ n_intermediate }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('normal')">Normal ({{ n_normal }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('not-genotyped')">Not Genotyped ({{ n_missing }})</button>
 </div>
+{% if evidence_levels %}
+<div class="filter-bar">
+  <span class="filter-label">Evidence:</span>
+  <button class="filter-btn evidence-filter active" onclick="filterEvidence('all')">All</button>
+  {% for level in evidence_levels %}
+  <button class="filter-btn evidence-filter" onclick="filterEvidence('{{ level }}')">{{ level }} ({{ evidence_counts[level] }})</button>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div id="cards">
   {% for r in results %}
   {% set border_class = 'card-' + r.locus_status | replace('_', '-') %}
-  <div class="locus-card {{ border_class }}">
+  <div class="locus-card {{ border_class }}" data-evidence="{{ r.evidence }}">
     <div class="card-header">
       <div class="card-title">
         <strong>{{ r.gene }}</strong> — {{ r.disease }}
         {{ status_badge(r.locus_status) }}
+        {% if r.evidence %}
+        <span class="evidence-badge evidence-{{ r.evidence.split(',')[0].strip() }}">{{ r.evidence }}</span>
+        {% endif %}
       </div>
       <div class="card-meta">
         {{ r.chrom }}:{{ '{:,}'.format(r.start) }}–{{ '{:,}'.format(r.end) }} · {{ r.motif }}
@@ -126,6 +224,13 @@
         {%- if r.inheritance %} · {{ r.inheritance }}{% endif %}
         {%- if r.mechanism %} · {{ r.mechanism }}{% endif %}
       </div>
+      {% if r.external_links %}
+      <div class="external-links">
+        {% for link in r.external_links %}
+        <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     <div class="gauge-container">
       {{ svg_gauge(r) }}
@@ -139,17 +244,9 @@
     {% endif %}
     {% if r.genotyped and r.allele1_ru is not none %}
     <div class="allele-row">
-      {% if r.allele1_ru == r.allele1_ru | int %}
       <span class="allele-label" style="color:#0d6efd">Allele 1: {{ r.allele1_ru | int }} repeats</span>
-      {% else %}
-      <span class="allele-label" style="color:#0d6efd">Allele 1: {{ '%.1f' | format(r.allele1_ru) }} repeats</span>
-      {% endif %}
       {{ status_badge(r.allele1_status) }}
-      {% if r.allele2_ru == r.allele2_ru | int %}
       <span class="allele-label" style="color:#6610f2; margin-left:20px;">Allele 2: {{ r.allele2_ru | int }} repeats</span>
-      {% else %}
-      <span class="allele-label" style="color:#6610f2; margin-left:20px;">Allele 2: {{ '%.1f' | format(r.allele2_ru) }} repeats</span>
-      {% endif %}
       {{ status_badge(r.allele2_status) }}
     </div>
     {% endif %}
@@ -182,12 +279,28 @@
 </div>
 
 <script>
-function filterCards(status) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+let activeStatus = 'all';
+let activeEvidence = 'all';
+
+function filterStatus(status) {
+  activeStatus = status;
+  document.querySelectorAll('.status-filter').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
+  applyFilters();
+}
+
+function filterEvidence(evidence) {
+  activeEvidence = evidence;
+  document.querySelectorAll('.evidence-filter').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
   document.querySelectorAll('.locus-card').forEach(card => {
-    if (status === 'all') { card.style.display = ''; return; }
-    card.style.display = card.classList.contains('card-' + status) ? '' : 'none';
+    const statusMatch = activeStatus === 'all' || card.classList.contains('card-' + activeStatus);
+    const evidenceMatch = activeEvidence === 'all' || card.dataset.evidence === activeEvidence;
+    card.style.display = (statusMatch && evidenceMatch) ? '' : 'none';
   });
 }
 </script>
