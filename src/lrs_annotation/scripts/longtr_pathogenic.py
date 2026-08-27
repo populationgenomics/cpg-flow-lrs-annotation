@@ -10,6 +10,7 @@ Requires two reference files from STRchive (github.com/dashnowlab/STRchive):
 import gzip
 import itertools
 import json
+import math
 import re
 from argparse import ArgumentParser
 from collections import defaultdict
@@ -22,6 +23,16 @@ MIN_BED_COLUMNS = 5
 MIN_VCF_COLUMNS = 10
 
 MATCH_TOLERANCE = 20
+
+EXTERNAL_LINK_DEFS = [
+    ('omim', 'OMIM', 'https://omim.org/entry/{}'),
+    ('genereviews', 'GeneReviews', 'https://www.ncbi.nlm.nih.gov/books/{}'),
+    ('gnomad', 'gnomAD', 'https://gnomad.broadinstitute.org/short-tandem-repeat/{}?dataset=gnomad_r4'),
+    ('stripy', 'STRipy', 'https://stripy.org/database/{}'),
+    ('medgen', 'MedGen', 'https://www.ncbi.nlm.nih.gov/medgen/{}'),
+    ('gard', 'GARD', 'https://rarediseases.info.nih.gov/diseases/{}'),
+    ('orphanet', 'Orphanet', 'https://www.orpha.net/en/disease/detail/{}'),
+]
 
 
 def open_vcf(path: str):
@@ -178,7 +189,7 @@ def compute_allele_repeat_units(
                 bp_diff = int(gb_parts[i]) if i < len(gb_parts) else 0
             except ValueError:
                 bp_diff = 0
-            alleles.append(round(ref_copies + bp_diff / period, 1))
+            alleles.append(math.floor(ref_copies + bp_diff / period))
 
     return alleles[0], alleles[1]
 
@@ -243,11 +254,20 @@ def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int
         try:
             bp_diff = int(parts[0])
             count = int(parts[1]) if len(parts) > 1 else 1
-            ru = round(ref_copies + bp_diff / period, 1)
+            ru = math.floor(ref_copies + bp_diff / period)
             read_alleles.extend([ru] * count)
         except ValueError:
             pass
     return read_alleles
+
+
+def _build_external_links(meta: dict) -> list[dict]:
+    links = []
+    for key, label, url_template in EXTERNAL_LINK_DEFS:
+        ids = meta.get(key, [])
+        if ids:
+            links.append({'label': label, 'url': url_template.format(ids[0])})
+    return links
 
 
 def _build_locus_meta(meta: dict, entry: dict) -> dict:
@@ -272,6 +292,8 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
         'pathogenic_min': meta.get('pathogenic_min'),
         'pathogenic_max': meta.get('pathogenic_max'),
         'ref_copies': meta.get('ref_copies'),
+        'evidence': ', '.join(meta.get('evidence', [])),
+        'external_links': _build_external_links(meta),
     }
 
 
@@ -391,6 +413,8 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
         'pathogenic_min': meta.get('pathogenic_min'),
         'pathogenic_max': meta.get('pathogenic_max'),
         'ref_copies': meta.get('ref_copies'),
+        'evidence': ', '.join(meta.get('evidence', [])),
+        'external_links': _build_external_links(meta),
         'dp': sample_data.get('DP', '.'),
         'q': sample_data.get('Q', '.'),
         'pq': sample_data.get('PQ', '.'),
@@ -558,7 +582,7 @@ def status_badge(status: str) -> str:
     return f'<span class="badge" style="background:{bg};color:{fg}">{label}</span>'
 
 
-def generate_html(results: list[dict], sample_name: str) -> str:
+def generate_html(results: list[dict], sample_name: str, report_type: str = 'default') -> str:
     template_dir = Path(__file__).resolve().parent / 'templates'
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(template_dir)),
@@ -570,8 +594,12 @@ def generate_html(results: list[dict], sample_name: str) -> str:
 
     template = env.get_template('longtr_pathogenic.html.jinja')
 
+    evidence_levels = sorted({r.get('evidence', '') for r in results if r.get('evidence')})
+    evidence_counts = {level: sum(1 for r in results if r.get('evidence') == level) for level in evidence_levels}
+
     return template.render(
         sample_name=sample_name,
+        report_type=report_type,
         results=results,
         n_genotyped=sum(1 for r in results if r['genotyped']),
         n_pathogenic=sum(1 for r in results if r['locus_status'] == 'pathogenic'),
@@ -579,6 +607,8 @@ def generate_html(results: list[dict], sample_name: str) -> str:
         n_uncertain=sum(1 for r in results if r['locus_status'] == 'uncertain'),
         n_normal=sum(1 for r in results if r['locus_status'] == 'normal'),
         n_missing=sum(1 for r in results if not r['genotyped']),
+        evidence_levels=evidence_levels,
+        evidence_counts=evidence_counts,
     )
 
 
@@ -617,6 +647,8 @@ def build_json_output(
         'gt',
         'dp',
         'q',
+        'evidence',
+        'external_links',
         'genotyped',
     )
     return {
@@ -644,13 +676,18 @@ def generate_report(
     longtr_bed: str,
     output_html: str,
     output_json: str,
+    report_type: str = 'default',
+    loci_list: set[str] | None = None,
 ):
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
     locus_index = build_locus_index(bed_entries)
     results, sample_name = scan_vcf(vcf_path, locus_index, strchive)
 
-    html_content = generate_html(results, sample_name)
+    if loci_list:
+        results = [r for r in results if r['locus_id'] in loci_list]
+
+    html_content = generate_html(results, sample_name, report_type)
     with open(output_html, 'w') as f:
         f.write(html_content)
 
@@ -680,9 +717,22 @@ def cli_main():
     parser.add_argument('--longtr_bed', required=True, help='Path to STRchive LongTR BED catalog')
     parser.add_argument('--output_html', default='longtr_pathogenic.html', help='Output HTML file')
     parser.add_argument('--output_json', default='longtr_pathogenic.json', help='Output JSON file')
+    parser.add_argument('--report_type', default='default', help='Report type label (e.g., default, paediatric)')
+    parser.add_argument('--loci_list', help='Locus IDs to include: comma-separated or path to file (one per line)')
     args = parser.parse_args()
 
-    generate_report(args.vcf_path, args.strchive_json, args.longtr_bed, args.output_html, args.output_json)
+    loci_set = None
+    if args.loci_list:
+        loci_path = Path(args.loci_list)
+        if loci_path.is_file():
+            loci_set = {line.strip() for line in loci_path.read_text().splitlines() if line.strip()}
+        else:
+            loci_set = {lid.strip() for lid in args.loci_list.split(',')}
+
+    generate_report(
+        args.vcf_path, args.strchive_json, args.longtr_bed,
+        args.output_html, args.output_json, args.report_type, loci_set,
+    )
 
 
 if __name__ == '__main__':
