@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pathogenic TR Expansion Screen — {{ sample_name }}</title>
+<style>
+  :root { --bg: #f8f9fa; --card: #fff; --border: #dee2e6; --text: #212529; --muted: #6c757d; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: var(--bg); color: var(--text); padding: 20px; max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 20px; font-size: 0.85rem; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                   gap: 10px; margin-bottom: 24px; }
+  .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+                   padding: 12px; text-align: center; }
+  .summary-card .value { font-size: 1.4rem; font-weight: 700; }
+  .summary-card .label { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .summary-card.highlight-red .value { color: #dc3545; }
+  .summary-card.highlight-yellow .value { color: #b8860b; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 20px; font-size: 0.8rem; align-items: center; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 16px; height: 12px; border-radius: 2px; opacity: 0.6; }
+
+  .locus-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--border); }
+  .card-normal { border-left-color: #28a745; }
+  .card-intermediate { border-left-color: #ffc107; }
+  .card-uncertain { border-left-color: #fd7e14; }
+  .card-pathogenic { border-left-color: #dc3545; }
+  .card-not-genotyped { border-left-color: #6c757d; opacity: 0.7; }
+
+  .card-header { margin-bottom: 8px; }
+  .card-title { font-size: 0.95rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-meta { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .evidence-badge { font-size: 0.65rem; padding: 1px 7px; border-radius: 8px; font-weight: 600;
+                     text-transform: uppercase; letter-spacing: 0.3px; }
+  .evidence-Definitive { background: #155724; color: #fff; }
+  .evidence-Strong { background: #28a745; color: #fff; }
+  .evidence-Moderate { background: #007bff; color: #fff; }
+  .evidence-Provisional { background: #17a2b8; color: #fff; }
+  .evidence-Limited { background: #6c757d; color: #fff; }
+  .evidence-Disputed { background: #fd7e14; color: #fff; }
+  .evidence-Refuted { background: #dc3545; color: #fff; }
+
+  .external-links { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .external-links a { font-size: 0.72rem; color: #007bff; text-decoration: none; padding: 1px 6px;
+                       border: 1px solid #dee2e6; border-radius: 4px; transition: all 0.15s; }
+  .external-links a:hover { background: #007bff; color: #fff; border-color: #007bff; }
+  .external-links a::after { content: ' \2197'; font-size: 0.6rem; }
+
+  .gauge-container { margin: 8px 0; }
+  .gauge-svg { width: 100%; height: auto; }
+  .gauge-placeholder { color: var(--muted); font-size: 0.8rem; font-style: italic; padding: 8px 0; }
+
+  .thresholds { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
+
+  .allele-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 0.82rem; flex-wrap: wrap; }
+  .allele-label { font-weight: 500; }
+
+  .card-details { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  .detail { font-size: 0.78rem; color: var(--muted); }
+
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px;
+                 background: var(--card); cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
+  .filter-btn:hover { background: #e9ecef; }
+  .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .filter-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-right: 4px;
+                   display: flex; align-items: center; }
+
+  .read-dots { margin-top: 2px; }
+
+  .seq-details { margin-top: 8px; }
+  .seq-details summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); user-select: none; }
+  .seq-details summary:hover { color: var(--text); }
+  .seq-details[open] summary { margin-bottom: 8px; }
+  .allele-seq { font-family: 'Courier New', Consolas, monospace; font-size: 0.7rem; word-break: break-all;
+                line-height: 1.6; padding: 8px; background: #f8f9fa; border-radius: 4px; margin: 4px 0;
+                border: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
+  .seq-label { font-size: 0.78rem; font-weight: 600; margin-top: 6px; }
+  .motif-match { background: #d4edda; }
+  .motif-match + .motif-match { border-left: 2px solid rgba(0,0,0,0.3); }
+  .motif-interrupt { background: #fff3cd; color: #856404; }
+
+  .glossary { margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .glossary summary { padding: 10px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+                       user-select: none; }
+  .glossary summary:hover { color: var(--text); }
+  .glossary[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 0; }
+  .glossary-content { padding: 12px 14px; }
+  .glossary-section { margin-bottom: 10px; }
+  .glossary-section:last-child { margin-bottom: 0; }
+  .glossary-section h3 { font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .glossary dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 0.78rem; margin: 0; }
+  .glossary dt { font-weight: 600; color: var(--text); }
+  .glossary dd { margin: 0; color: var(--muted); }
+
+  @media (max-width: 600px) {
+    .allele-row { flex-direction: column; align-items: flex-start; }
+    .allele-label { margin-left: 0 !important; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Pathogenic TR Expansion Screen{% if report_type and report_type != 'default' %} — {{ report_type | replace('_', ' ') | title }}{% endif %}</h1>
+<p class="subtitle">
+  Sample: <strong>{{ sample_name }}</strong> ·
+  {{ results | length }} STRchive disease loci · {{ n_genotyped }} genotyped
+</p>
+
+<details class="glossary">
+  <summary>Glossary &amp; external link guide</summary>
+  <div class="glossary-content">
+    <div class="glossary-section">
+      <h3>Per-locus metrics</h3>
+      <dl>
+        <dt>Depth (DP)</dt>
+        <dd>Number of reads used to call the genotype at this locus.</dd>
+        <dt>Q</dt>
+        <dd>Posterior probability of the unphased genotype (0&ndash;1; higher = more confident).</dd>
+        <dt>GT</dt>
+        <dd>Genotype call. Each number is an allele index; 0 = reference. Separator: / = unphased, | = phased.</dd>
+        <dt>GLDIFF</dt>
+        <dd>Genotype likelihood difference &mdash; log-likelihood gap between the best and second-best genotype. Higher values indicate a more confident call; &ldquo;.&rdquo; means indistinguishable.</dd>
+        <dt>Filter</dt>
+        <dd>LongTR per-sample filter status. PASS = no quality issues flagged.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Evidence levels (STRchive)</h3>
+      <dl>
+        <dt>Definitive</dt>
+        <dd>Strong, replicated evidence for disease association.</dd>
+        <dt>Strong / Moderate</dt>
+        <dd>Substantial evidence, possibly limited in replication or scope.</dd>
+        <dt>Provisional / Limited</dt>
+        <dd>Early or preliminary evidence; association not yet firmly established.</dd>
+        <dt>Disputed / Refuted</dt>
+        <dd>Evidence has been challenged or contradicted.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>External links</h3>
+      <dl>
+        <dt>OMIM</dt>
+        <dd>Online Mendelian Inheritance in Man &mdash; curated disease-gene relationships.</dd>
+        <dt>GeneReviews</dt>
+        <dd>Expert-authored clinical summaries of genetic conditions (NCBI).</dd>
+        <dt>gnomAD</dt>
+        <dd>Genome Aggregation Database &mdash; population allele-size distributions for STR loci.</dd>
+        <dt>STRipy</dt>
+        <dd>Short tandem repeat genotyping tool and database with population data.</dd>
+        <dt>MedGen</dt>
+        <dd>NCBI portal linking medical genetics information across sources.</dd>
+        <dt>GARD</dt>
+        <dd>Genetic and Rare Diseases Information Center (NIH).</dd>
+        <dt>Orphanet</dt>
+        <dd>European reference portal for rare diseases and orphan drugs.</dd>
+      </dl>
+    </div>
+  </div>
+</details>
+
+<div class="summary-grid">
+  <div class="summary-card highlight-red"><div class="value">{{ n_pathogenic }}</div><div class="label">Pathogenic</div></div>
+  <div class="summary-card highlight-yellow"><div class="value">{{ n_intermediate }}</div><div class="label">Intermediate</div></div>
+  <div class="summary-card"><div class="value">{{ n_uncertain }}</div><div class="label">Uncertain</div></div>
+  <div class="summary-card"><div class="value">{{ n_normal }}</div><div class="label">Normal</div></div>
+  <div class="summary-card"><div class="value">{{ n_missing }}</div><div class="label">Not Genotyped</div></div>
+</div>
+
+<div class="legend">
+  <span style="font-weight:600;">Gauge key:</span>
+  <div class="legend-item"><div class="legend-swatch" style="background:#28a745;"></div> Normal</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ffc107;"></div> Intermediate</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#dc3545;"></div> Pathogenic</div>
+  <div class="legend-item"><svg width="16" height="12"><line x1="8" y1="0" x2="8" y2="12" stroke="#0d6efd" stroke-width="2.5"/><circle cx="8" cy="2" r="3" fill="#0d6efd"/></svg> Allele 1</div>
+  <div class="legend-item"><svg width="16" height="12"><line x1="8" y1="0" x2="8" y2="12" stroke="#6610f2" stroke-width="2.5"/><circle cx="8" cy="2" r="3" fill="#6610f2"/></svg> Allele 2</div>
+  <div class="legend-item"><svg width="16" height="12"><circle cx="8" cy="6" r="3" fill="rgba(100,100,100,0.2)"/></svg> Per-read alleles</div>
+</div>
+
+<div class="filter-bar">
+  <span class="filter-label">Status:</span>
+  <button class="filter-btn status-filter active" onclick="filterStatus('all')">All ({{ results | length }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('pathogenic')">Pathogenic ({{ n_pathogenic }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('intermediate')">Intermediate ({{ n_intermediate }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('normal')">Normal ({{ n_normal }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('not-genotyped')">Not Genotyped ({{ n_missing }})</button>
+</div>
+{% if evidence_levels %}
+<div class="filter-bar">
+  <span class="filter-label">Evidence:</span>
+  <button class="filter-btn evidence-filter active" onclick="filterEvidence('all')">All</button>
+  {% for level in evidence_levels %}
+  <button class="filter-btn evidence-filter" onclick="filterEvidence('{{ level }}')">{{ level }} ({{ evidence_counts[level] }})</button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="cards">
+  {% for r in results %}
+  {% set border_class = 'card-' + r.locus_status | replace('_', '-') %}
+  <div class="locus-card {{ border_class }}" data-evidence="{{ r.evidence }}">
+    <div class="card-header">
+      <div class="card-title">
+        <strong>{{ r.gene }}</strong> — {{ r.disease }}
+        {{ status_badge(r.locus_status) }}
+        {% if r.evidence %}
+        <span class="evidence-badge evidence-{{ r.evidence.split(',')[0].strip() }}">{{ r.evidence }}</span>
+        {% endif %}
+      </div>
+      <div class="card-meta">
+        {{ r.chrom }}:{{ '{:,}'.format(r.start) }}–{{ '{:,}'.format(r.end) }} · {{ r.motif }}
+        {%- if r.location_in_gene %} · {{ r.location_in_gene }}{% endif %}
+        {%- if r.inheritance %} · {{ r.inheritance }}{% endif %}
+        {%- if r.mechanism %} · {{ r.mechanism }}{% endif %}
+      </div>
+      {% if r.external_links %}
+      <div class="external-links">
+        {% for link in r.external_links %}
+        <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="gauge-container">
+      {{ svg_gauge(r) }}
+    </div>
+    {% if r.benign_max is not none or r.intermediate_min is not none or r.pathogenic_min is not none %}
+    <div class="thresholds">
+      {%- if r.benign_max is not none %}Normal: &le;{{ r.benign_max }}{% endif %}
+      {%- if r.intermediate_min is not none and r.intermediate_max is not none %}{% if r.benign_max is not none %} &middot; {% endif %}Intermediate: {{ r.intermediate_min }}&ndash;{{ r.intermediate_max }}{% endif %}
+      {%- if r.pathogenic_min is not none %}{% if r.benign_max is not none or (r.intermediate_min is not none and r.intermediate_max is not none) %} &middot; {% endif %}Pathogenic: &ge;{{ r.pathogenic_min }}{% endif %}
+    </div>
+    {% endif %}
+    {% if r.genotyped and r.allele1_ru is not none %}
+    <div class="allele-row">
+      <span class="allele-label" style="color:#0d6efd">Allele 1: {{ r.allele1_ru | int }} repeats</span>
+      {{ status_badge(r.allele1_status) }}
+      <span class="allele-label" style="color:#6610f2; margin-left:20px;">Allele 2: {{ r.allele2_ru | int }} repeats</span>
+      {{ status_badge(r.allele2_status) }}
+    </div>
+    {% endif %}
+    {% if r.genotyped %}
+    <div class="card-details">
+      <span class="detail">Depth: <strong>{{ r.dp }}</strong></span>
+      <span class="detail">Q: <strong>{{ r.q }}</strong></span>
+      <span class="detail">GT: <strong>{{ r.gt }}</strong></span>
+      <span class="detail">Filter: <strong>{{ r.filter }}</strong></span>
+      {% if r.gldiff != '.' %}
+      <span class="detail">GLDIFF: <strong>{{ r.gldiff }}</strong></span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if r.genotyped and (r.allele1_seq or r.allele2_seq) %}
+    <details class="seq-details">
+      <summary>View allele sequences ({{ r.primary_motif }} motif)</summary>
+      {% if r.allele1_seq %}
+      <div class="seq-label" style="color:#0d6efd">Allele 1 ({{ r.allele1_seq | length }} bp)</div>
+      <div class="allele-seq">{{ highlight_seq(r.allele1_seq, r.primary_motif) }}</div>
+      {% endif %}
+      {% if r.allele2_seq %}
+      <div class="seq-label" style="color:#6610f2">Allele 2 ({{ r.allele2_seq | length }} bp)</div>
+      <div class="allele-seq">{{ highlight_seq(r.allele2_seq, r.primary_motif) }}</div>
+      {% endif %}
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+let activeStatus = 'all';
+let activeEvidence = 'all';
+
+function filterStatus(status) {
+  activeStatus = status;
+  document.querySelectorAll('.status-filter').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  applyFilters();
+}
+
+function filterEvidence(evidence) {
+  activeEvidence = evidence;
+  document.querySelectorAll('.evidence-filter').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  document.querySelectorAll('.locus-card').forEach(card => {
+    const statusMatch = activeStatus === 'all' || card.classList.contains('card-' + activeStatus);
+    const evidenceMatch = activeEvidence === 'all' || card.dataset.evidence === activeEvidence;
+    card.style.display = (statusMatch && evidenceMatch) ? '' : 'none';
+  });
+}
+</script>
+
+<footer style="margin-top:32px; padding-top:16px; border-top:1px solid var(--border); font-size:0.75rem; color:var(--muted);">
+  Disease loci and thresholds from <a href="https://strchive.org" target="_blank">STRchive</a> (Dashnow Lab).
+  Genotypes from <a href="https://github.com/gymreklab/LongTR" target="_blank">LongTR</a>.
+  This report is for research use only and is not a clinical diagnostic.
+</footer>
+
+</body>
+</html>
