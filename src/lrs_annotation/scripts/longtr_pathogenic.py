@@ -1,10 +1,36 @@
 """
-Screen a LongTR VCF against STRchive disease-associated TR loci and
-generate a standalone HTML report with STRIPY-style gauge visualizations.
+Screen a LongTR VCF against STRchive disease-associated TR loci and generate
+a standalone HTML report with gauge visualizations.
 
-Requires two reference files from STRchive (github.com/dashnowlab/STRchive):
-  - STRchive-loci.json (disease locus metadata + thresholds)
-  - STRchive-disease-loci.hg38.longTR.bed (coordinates for matching)
+Algorithm:
+1. Load STRchive locus metadata (JSON) and genomic coordinates (BED).
+2. Index BED entries by chromosome for fast positional lookup.
+3. Scan the VCF: for each variant, find matching disease loci within a
+   positional tolerance and compute per-allele repeat unit counts using
+   motif counting (for alt alleles) or genotype-block deltas (for ref).
+   Alt alleles (explicit sequence): If the sample's allele differs from the reference,
+   LongTR writes the full DNA sequence in the ALT column.
+   We count how many times the repeat motif appears in that sequence. Alt alleles are counted differently because
+   the alt allele sequence can contain interruptions — bases between motif repeats that break the pure repeat pattern.
+   A simple length-based calculation (len(alt_seq) / period) would overcount
+   by including those interrupting bases as if they were part of the repeat. Granted that it doesn't happen often,
+   but we deal in rare events here.
+
+  Ref alleles (genotype-block delta):
+  If the allele matches reference (GT index 0),there's no explicit sequence — just the ref.
+  Instead we use the GB (genotype block) FORMAT field, which gives a base-pair difference
+    from the reference repeat region. We calculate: floor(ref_copies + bp_diff / period).
+
+4. Classify each allele as normal/intermediate/pathogenic/uncertain against
+   STRchive thresholds, then derive a per-locus status from the worst allele.
+5. Append not-genotyped entries for any disease loci absent from the VCF.
+6. Render results as an interactive HTML report (SVG gauges, motif
+   highlighting, evidence filtering) and a structured JSON summary.
+
+References:
+  - STRchive-loci.json: disease locus metadata + thresholds
+  - STRchive-disease-loci.hg38.longTR.bed: coordinates for matching
+  Both from STRchive (github.com/dashnowlab/STRchive), with custom entries.
 """
 
 import gzip
@@ -36,18 +62,21 @@ EXTERNAL_LINK_DEFS = [
 
 
 def open_vcf(path: str):
+    """Open a VCF file, handling gzip-compressed inputs."""
     if path.endswith('.gz'):
         return gzip.open(path, 'rt')
     return open(path)
 
 
 def load_strchive_json(path: str) -> dict:
+    """Load STRchive loci JSON and index entries by locus ID."""
     with open(path) as f:
         loci = json.load(f)
     return {locus['id']: locus for locus in loci}
 
 
 def load_longtr_bed(path: str) -> list[dict]:
+    """Parse a LongTR BED catalog into a list of locus entries."""
     entries = []
     with open(path) as f:
         for raw_line in f:
@@ -70,6 +99,7 @@ def load_longtr_bed(path: str) -> list[dict]:
 
 
 def build_locus_index(bed_entries: list[dict]) -> dict:
+    """Group BED entries by chromosome for positional lookup."""
     index = defaultdict(list)
     for entry in bed_entries:
         index[entry['chrom']].append(entry)
@@ -77,6 +107,7 @@ def build_locus_index(bed_entries: list[dict]) -> dict:
 
 
 def find_matching_locus(chrom: str, vcf_start: int, vcf_end: int, index: dict) -> dict | None:
+    """Find the BED entry matching a VCF position within MATCH_TOLERANCE bp."""
     candidates = index.get(chrom, [])
     for entry in candidates:
         if abs(vcf_start - entry['start']) <= MATCH_TOLERANCE and abs(vcf_end - entry['end']) <= MATCH_TOLERANCE:
@@ -85,6 +116,7 @@ def find_matching_locus(chrom: str, vcf_start: int, vcf_end: int, index: dict) -
 
 
 def parse_info(info_str: str) -> dict[str, str]:
+    """Parse a VCF INFO field into a key-value dict."""
     fields = {}
     for item in info_str.split(';'):
         if '=' in item:
@@ -96,6 +128,7 @@ def parse_info(info_str: str) -> dict[str, str]:
 
 
 def parse_format_sample(fmt_str: str, sample_str: str) -> dict[str, str]:
+    """Zip FORMAT keys with sample values into a dict."""
     keys = fmt_str.split(':')
     values = sample_str.split(':')
     return dict(zip(keys, values, strict=False))
@@ -119,6 +152,7 @@ _motif_regex_cache: dict[str, re.Pattern] = {}
 
 
 def _motif_to_regex(motif: str) -> re.Pattern:
+    """Compile a motif with IUPAC ambiguity codes into a cached regex."""
     if motif not in _motif_regex_cache:
         pattern = ''.join(IUPAC_MAP.get(c, c) for c in motif.upper())
         _motif_regex_cache[motif] = re.compile(pattern)
@@ -126,10 +160,12 @@ def _motif_to_regex(motif: str) -> re.Pattern:
 
 
 def _is_degenerate(motif: str) -> bool:
+    """Check whether a motif contains IUPAC ambiguity codes."""
     return any(c in IUPAC_MAP for c in motif.upper())
 
 
 def count_motif_in_sequence(sequence: str, motif: str) -> int:
+    """Count non-overlapping occurrences of a motif in a DNA sequence."""
     seq = sequence.upper()
     motif_upper = motif.upper()
     if not _is_degenerate(motif_upper):
@@ -138,6 +174,7 @@ def count_motif_in_sequence(sequence: str, motif: str) -> int:
 
 
 def highlight_motifs_in_sequence(sequence: str, motif: str) -> str:
+    """Wrap motif matches in HTML spans for colored highlighting."""
     seq = sequence.upper()
     motif_upper = motif.upper()
     pattern = _motif_to_regex(motif_upper)
@@ -160,22 +197,12 @@ def compute_allele_repeat_units(
     gb_str: str,
     info_start: int,
     info_end: int,
-    gt_str: str,
+    gt_indices: list[int],
     alt_alleles: list[str],
     motif: str,
 ) -> tuple[float, float]:
-    ref_repeat_bp = info_end - info_start + 1
-    ref_copies = ref_repeat_bp / period
-
-    sep = '|' if '|' in gt_str else '/'
-    gt_indices = []
-    for idx_str in gt_str.split(sep):
-        try:
-            gt_indices.append(int(idx_str))
-        except ValueError:
-            gt_indices.append(0)
-    if len(gt_indices) == 1:
-        gt_indices = [gt_indices[0], gt_indices[0]]
+    """Compute repeat unit counts for both alleles from GT, GB, and alt sequences."""
+    ref_copies = (info_end - info_start + 1) / period
 
     gb_sep = '|' if '|' in gb_str else '/'
     gb_parts = gb_str.split(gb_sep)
@@ -195,6 +222,7 @@ def compute_allele_repeat_units(
 
 
 def classify_allele(repeat_units: float, locus_meta: dict) -> str:
+    """Classify a repeat count as normal/intermediate/pathogenic/uncertain."""
     benign_max = locus_meta.get('benign_max')
     intermediate_min = locus_meta.get('intermediate_min')
     intermediate_max = locus_meta.get('intermediate_max')
@@ -218,11 +246,13 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:
 
 
 def classify_locus(status1: str, status2: str) -> str:
+    """Return the more severe of two allele classifications."""
     priority = {'pathogenic': 0, 'intermediate': 1, 'uncertain': 2, 'normal': 3}
     return status1 if priority.get(status1, 99) <= priority.get(status2, 99) else status2
 
 
 def _parse_gt_indices(gt_str: str) -> list[int]:
+    """Parse a GT field string into integer allele indices."""
     sep = '|' if '|' in gt_str else '/'
     indices = []
     for idx_str in gt_str.split(sep):
@@ -236,12 +266,14 @@ def _parse_gt_indices(gt_str: str) -> list[int]:
 
 
 def _resolve_allele_seq(gt_idx: int, alt_alleles: list[str], ref_seq: str) -> str:
+    """Return the allele sequence for a GT index (ref or alt)."""
     if gt_idx > 0 and gt_idx <= len(alt_alleles):
         return alt_alleles[gt_idx - 1]
     return ref_seq
 
 
 def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int) -> list[float]:
+    """Parse the ALLREADS field into per-read repeat unit counts."""
     if not allreads_str or allreads_str == '.':
         return []
     ref_repeat_bp = vcf_end - vcf_start + 1
@@ -262,6 +294,7 @@ def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int
 
 
 def _build_external_links(meta: dict) -> list[dict]:
+    """Build external database links from STRchive metadata."""
     links = []
     for key, label, url_template in EXTERNAL_LINK_DEFS:
         ids = meta.get(key, [])
@@ -271,6 +304,7 @@ def _build_external_links(meta: dict) -> list[dict]:
 
 
 def _build_locus_meta(meta: dict, entry: dict) -> dict:
+    """Assemble shared locus metadata from STRchive and BED entry fields."""
     motif_list = meta.get('reference_motif_reference_orientation', entry['motifs'])
     return {
         'gene': meta.get('gene', ''),
@@ -297,19 +331,14 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
-def _read_vcf_line(raw_line) -> str:
-    if isinstance(raw_line, bytes):
-        return raw_line.decode().rstrip('\n')
-    return raw_line.rstrip('\n')
-
-
 def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dict], str]:
+    """Scan a VCF against the locus index, returning sorted results and sample name."""
     results = {}
     sample_name = ''
 
     with open_vcf(vcf_path) as f:
         for raw_line in f:
-            text = _read_vcf_line(raw_line)
+            text = raw_line.rstrip('\n')
 
             if text.startswith('##'):
                 continue
@@ -362,43 +391,36 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dic
 
 
 def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
+    """Extract genotype data and classify alleles for a single VCF record."""
     sample_data = parse_format_sample(cols[8], cols[9])
     period = int(info.get('PERIOD', meta.get('motif_len', 3)))
-
     alt_alleles = cols[4].split(',') if cols[4] != '.' else []
-    motif_list = meta.get('reference_motif_reference_orientation', match['motifs'])
-    primary_motif = motif_list[0] if motif_list else match['motifs'][0]
 
-    gt_str = sample_data.get('GT', '0/0')
+    # Parse GT once, reuse for repeat counting and allele sequences
+    gt_indices = _parse_gt_indices(sample_data.get('GT', '0/0'))
+
+    # Shared locus metadata from STRchive + BED, with VCF-specific overrides
+    base = _build_locus_meta(meta, match)
+    base['start'] = vcf_start
+    base['end'] = vcf_end
+    base['period'] = period
+
     a1, a2 = compute_allele_repeat_units(
         period,
         sample_data.get('GB', '0|0'),
         vcf_start,
         vcf_end,
-        gt_str,
+        gt_indices,
         alt_alleles,
-        primary_motif,
+        base['primary_motif'],
     )
 
-    gt_indices = _parse_gt_indices(gt_str)
-    ref_seq = cols[3]
     s1 = classify_allele(a1, meta)
     s2 = classify_allele(a2, meta)
+    ref_seq = cols[3]
 
-    return {
+    base.update({
         'locus_id': match['locus_id'],
-        'gene': meta.get('gene', ''),
-        'disease': meta.get('disease', ''),
-        'disease_id': meta.get('disease_id', ''),
-        'chrom': cols[0],
-        'start': vcf_start,
-        'end': vcf_end,
-        'motif': ','.join(motif_list),
-        'primary_motif': primary_motif,
-        'period': period,
-        'location_in_gene': meta.get('location_in_gene', ''),
-        'inheritance': ', '.join(meta.get('inheritance', [])),
-        'mechanism': meta.get('mechanism', ''),
         'allele1_ru': a1,
         'allele2_ru': a2,
         'allele1_seq': _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq),
@@ -406,15 +428,6 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
         'allele1_status': s1,
         'allele2_status': s2,
         'locus_status': classify_locus(s1, s2),
-        'benign_min': meta.get('benign_min'),
-        'benign_max': meta.get('benign_max'),
-        'intermediate_min': meta.get('intermediate_min'),
-        'intermediate_max': meta.get('intermediate_max'),
-        'pathogenic_min': meta.get('pathogenic_min'),
-        'pathogenic_max': meta.get('pathogenic_max'),
-        'ref_copies': meta.get('ref_copies'),
-        'evidence': ', '.join(meta.get('evidence', [])),
-        'external_links': _build_external_links(meta),
         'dp': sample_data.get('DP', '.'),
         'q': sample_data.get('Q', '.'),
         'pq': sample_data.get('PQ', '.'),
@@ -423,10 +436,12 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
         'filter': sample_data.get('FILTER', '.'),
         'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
         'genotyped': True,
-    }
+    })
+    return base
 
 
 def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
+    """Add not-genotyped placeholder entries for loci absent from the VCF."""
     for entry in itertools.chain.from_iterable(locus_index.values()):
         lid = entry['locus_id']
         if lid in results:
@@ -457,6 +472,7 @@ def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
 
 
 def _gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result) -> list[str]:
+    """Render SVG colored rectangles for benign/intermediate/pathogenic zones."""
     parts = []
     benign_max = result['benign_max']
     pathogenic_min = result['pathogenic_min']
@@ -486,6 +502,7 @@ def _gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result) -> list
 
 
 def _gauge_ticks(x_pos, bar_y, bar_h, result) -> list[str]:
+    """Render SVG tick marks and labels at threshold boundaries."""
     tick_values = {
         v
         for v in [
@@ -516,6 +533,7 @@ def _gauge_ticks(x_pos, bar_y, bar_h, result) -> list[str]:
 
 
 def _gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result) -> list[str]:
+    """Render SVG markers for allele positions and supporting read dots."""
     parts = []
     for ra in result.get('read_alleles', []):
         if ra <= scale_max:
@@ -540,6 +558,7 @@ def _gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result) -> lis
 
 
 def svg_gauge(result: dict, width: int = 600) -> str:
+    """Build a complete SVG gauge visualization for a locus result."""
     if not result['genotyped']:
         return '<div class="gauge-placeholder">Not genotyped — locus not found in VCF</div>'
 
@@ -570,6 +589,7 @@ def svg_gauge(result: dict, width: int = 600) -> str:
 
 
 def status_badge(status: str) -> str:
+    """Return an HTML badge span for a classification status."""
     colors = {
         'pathogenic': ('#dc3545', '#fff'),
         'intermediate': ('#ffc107', '#333'),
@@ -582,7 +602,20 @@ def status_badge(status: str) -> str:
     return f'<span class="badge" style="background:{bg};color:{fg}">{label}</span>'
 
 
-def generate_html(results: list[dict], sample_name: str, report_type: str = 'default') -> str:
+def _summarise_results(results: list[dict]) -> dict[str, int]:
+    """Count results by genotyped status and locus classification."""
+    counts: dict[str, int] = {'total_loci': len(results), 'genotyped': 0, 'not_genotyped': 0}
+    for r in results:
+        if r['genotyped']:
+            counts['genotyped'] += 1
+            counts[r['locus_status']] = counts.get(r['locus_status'], 0) + 1
+        else:
+            counts['not_genotyped'] += 1
+    return counts
+
+
+def generate_html(results: list[dict], sample_name: str, summary: dict[str, int], report_type: str = 'default') -> str:
+    """Render the full HTML report from results via the Jinja2 template."""
     template_dir = Path(__file__).resolve().parent / 'templates'
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(template_dir)),
@@ -601,12 +634,12 @@ def generate_html(results: list[dict], sample_name: str, report_type: str = 'def
         sample_name=sample_name,
         report_type=report_type,
         results=results,
-        n_genotyped=sum(1 for r in results if r['genotyped']),
-        n_pathogenic=sum(1 for r in results if r['locus_status'] == 'pathogenic'),
-        n_intermediate=sum(1 for r in results if r['locus_status'] == 'intermediate'),
-        n_uncertain=sum(1 for r in results if r['locus_status'] == 'uncertain'),
-        n_normal=sum(1 for r in results if r['locus_status'] == 'normal'),
-        n_missing=sum(1 for r in results if not r['genotyped']),
+        n_genotyped=summary.get('genotyped', 0),
+        n_pathogenic=summary.get('pathogenic', 0),
+        n_intermediate=summary.get('intermediate', 0),
+        n_uncertain=summary.get('uncertain', 0),
+        n_normal=summary.get('normal', 0),
+        n_missing=summary.get('not_genotyped', 0),
         evidence_levels=evidence_levels,
         evidence_counts=evidence_counts,
     )
@@ -615,9 +648,11 @@ def generate_html(results: list[dict], sample_name: str, report_type: str = 'def
 def build_json_output(
     results: list[dict],
     sample_name: str,
+    summary: dict[str, int],
     strchive_json_path: str,
     longtr_bed_path: str,
 ) -> dict:
+    """Build the structured JSON output dict from screening results."""
     json_fields = (
         'locus_id',
         'gene',
@@ -657,15 +692,7 @@ def build_json_output(
             'strchive_json': strchive_json_path,
             'longtr_bed': longtr_bed_path,
         },
-        'summary': {
-            'total_loci': len(results),
-            'genotyped': sum(1 for r in results if r['genotyped']),
-            'pathogenic': sum(1 for r in results if r['locus_status'] == 'pathogenic'),
-            'intermediate': sum(1 for r in results if r['locus_status'] == 'intermediate'),
-            'uncertain': sum(1 for r in results if r['locus_status'] == 'uncertain'),
-            'normal': sum(1 for r in results if r['locus_status'] == 'normal'),
-            'not_genotyped': sum(1 for r in results if not r['genotyped']),
-        },
+        'summary': summary,
         'loci': [{k: v for k, v in r.items() if k in json_fields} for r in results],
     }
 
@@ -679,6 +706,7 @@ def generate_report(
     report_type: str = 'default',
     loci_list: set[str] | None = None,
 ):
+    """Load references, scan VCF, optionally filter by loci list, and write outputs."""
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
     locus_index = build_locus_index(bed_entries)
@@ -687,18 +715,20 @@ def generate_report(
     if loci_list:
         results = [r for r in results if r['locus_id'] in loci_list]
 
-    html_content = generate_html(results, sample_name, report_type)
+    summary = _summarise_results(results)
+
+    html_content = generate_html(results, sample_name, summary, report_type)
     with open(output_html, 'w') as f:
         f.write(html_content)
 
-    json_output = build_json_output(results, sample_name, strchive_json, longtr_bed)
+    json_output = build_json_output(results, sample_name, summary, strchive_json, longtr_bed)
     with open(output_json, 'w') as f:
         json.dump(json_output, f, indent=2)
 
     def _fmt_ru(v) -> str:
         return f'{v:.0f}' if v == int(v) else f'{v:.1f}'
 
-    print(f'Screened {len(results)} disease loci ({sum(1 for r in results if r["genotyped"])} genotyped)')
+    print(f'Screened {len(results)} disease loci ({summary["genotyped"]} genotyped)')
     for r in results:
         if r['locus_status'] in ('pathogenic', 'intermediate', 'uncertain'):
             a1_str = _fmt_ru(r['allele1_ru'])
@@ -709,6 +739,7 @@ def generate_report(
 
 
 def cli_main():
+    """Parse CLI arguments and run the report pipeline."""
     parser = ArgumentParser(
         description='Screen a LongTR VCF against STRchive disease-associated TR loci.',
     )
