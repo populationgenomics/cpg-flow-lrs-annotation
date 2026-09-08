@@ -15,7 +15,7 @@ def make_long_read_cram_path(sg: targets.SequencingGroup) -> CramPath:
     """
     Path to a CRAM file. Not checking its existence here.
     """
-    path: Path = sg.dataset.prefix() / 'long_read' / 'cram' / f'{sg.id}.cram'
+    path: Path = sg.dataset.prefix() / 'cram' / f'{sg.id}.cram'
     return CramPath(
         path=path,
         index_path=path.with_suffix('.cram.crai'),
