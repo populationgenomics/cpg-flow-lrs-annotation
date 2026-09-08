@@ -32,7 +32,9 @@ storage_client = storage.Client()
 
 
 def fix_cram_paths(result, dry_run=False):
-    # Implement the logic to fix CRAM paths based on the query result
+    """
+    Find long read cram analyses at the wrong path and move them to the correct location.
+    """
     for sg in result['project']['sequencingGroups']:
         for analysis in sg['analyses']:
             if 'long_read/long_read/cram' not in analysis['outputs']['path']:
