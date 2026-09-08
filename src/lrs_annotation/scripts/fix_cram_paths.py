@@ -57,7 +57,7 @@ def fix_cram_paths(result, dry_run=False):
                 )
                 AnalysisApi().update_analysis(
                     analysis_id=analysis['id'],
-                    analysis_update=AnalysisUpdateModel(outputs={'basename': f'gs://{bucket.name}/{new_blob_str}'}),
+                    analysis_update_model=AnalysisUpdateModel(outputs={'basename': f'gs://{bucket.name}/{new_blob_str}'}),
                 )
             else:
                 loguru.logger.info(f'Dry run: would move {source_blob.name} to {new_blob_str} in {bucket.name}')
