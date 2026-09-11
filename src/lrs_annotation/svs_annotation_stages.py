@@ -370,7 +370,7 @@ class AnnotateSVsWithGatk(stage.MultiCohortStage):
             input_vcf = inputs.as_path(multicohort, MergeSVsVcfsWithBcftools, 'vcf')
 
         jobs = AnnotateVcfGatk.queue_annotate_sv_jobs(
-            dataset_name=multicohort.analysis_dataset,
+            dataset_name=multicohort.analysis_dataset.name,
             multicohort_name=multicohort.name,
             multicohort_ped_file_path=inputs.as_path(multicohort, WriteCleanedPedFile, 'ped_file'),
             input_vcf=input_vcf,
