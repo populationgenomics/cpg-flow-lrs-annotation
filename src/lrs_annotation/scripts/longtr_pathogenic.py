@@ -419,24 +419,26 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
     s2 = classify_allele(a2, meta)
     ref_seq = cols[3]
 
-    base.update({
-        'locus_id': match['locus_id'],
-        'allele1_ru': a1,
-        'allele2_ru': a2,
-        'allele1_seq': _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq),
-        'allele2_seq': _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq),
-        'allele1_status': s1,
-        'allele2_status': s2,
-        'locus_status': classify_locus(s1, s2),
-        'dp': sample_data.get('DP', '.'),
-        'q': sample_data.get('Q', '.'),
-        'pq': sample_data.get('PQ', '.'),
-        'gldiff': sample_data.get('GLDIFF', '.'),
-        'gt': sample_data.get('GT', '.'),
-        'filter': sample_data.get('FILTER', '.'),
-        'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
-        'genotyped': True,
-    })
+    base.update(
+        {
+            'locus_id': match['locus_id'],
+            'allele1_ru': a1,
+            'allele2_ru': a2,
+            'allele1_seq': _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq),
+            'allele2_seq': _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq),
+            'allele1_status': s1,
+            'allele2_status': s2,
+            'locus_status': classify_locus(s1, s2),
+            'dp': sample_data.get('DP', '.'),
+            'q': sample_data.get('Q', '.'),
+            'pq': sample_data.get('PQ', '.'),
+            'gldiff': sample_data.get('GLDIFF', '.'),
+            'gt': sample_data.get('GT', '.'),
+            'filter': sample_data.get('FILTER', '.'),
+            'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
+            'genotyped': True,
+        }
+    )
     return base
 
 
