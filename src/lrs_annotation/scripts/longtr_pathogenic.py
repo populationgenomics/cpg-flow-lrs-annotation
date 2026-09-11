@@ -5,21 +5,11 @@ a standalone HTML report with gauge visualizations.
 Algorithm:
 1. Load STRchive locus metadata (JSON) and genomic coordinates (BED).
 2. Index BED entries by chromosome for fast positional lookup.
-3. Scan the VCF: for each variant, find matching disease loci within a
+3. Scan the VCF: for each variant, find all matching disease loci within a
    positional tolerance and compute per-allele repeat unit counts using
-   motif counting (for alt alleles) or genotype-block deltas (for ref).
-   Alt alleles (explicit sequence): If the sample's allele differs from the reference,
-   LongTR writes the full DNA sequence in the ALT column.
-   We count how many times the repeat motif appears in that sequence. Alt alleles are counted differently because
-   the alt allele sequence can contain interruptions — bases between motif repeats that break the pure repeat pattern.
-   A simple length-based calculation (len(alt_seq) / period) would overcount
-   by including those interrupting bases as if they were part of the repeat. Granted that it doesn't happen often,
-   but we deal in rare events here.
-
-  Ref alleles (genotype-block delta):
-  If the allele matches reference (GT index 0),there's no explicit sequence — just the ref.
-  Instead we use the GB (genotype block) FORMAT field, which gives a base-pair difference
-    from the reference repeat region. We calculate: floor(ref_copies + bp_diff / period).
+   motif counting for both ref and alt alleles. This handles interruptions
+   (bases between motif repeats) correctly, whereas a length-based approach
+   would overcount by including interrupting bases as part of the repeat.
 
 4. Classify each allele as normal/intermediate/pathogenic/uncertain against
    STRchive thresholds, then derive a per-locus status from the worst allele.
@@ -106,13 +96,13 @@ def build_locus_index(bed_entries: list[dict]) -> dict:
     return dict(index)
 
 
-def find_matching_locus(chrom: str, vcf_start: int, vcf_end: int, index: dict) -> dict | None:
-    """Find the BED entry matching a VCF position within MATCH_TOLERANCE bp."""
-    candidates = index.get(chrom, [])
-    for entry in candidates:
+def find_matching_loci(chrom: str, vcf_start: int, vcf_end: int, index: dict) -> list[dict]:
+    """Find all BED entries matching a VCF position within MATCH_TOLERANCE bp."""
+    matches = []
+    for entry in index.get(chrom, []):
         if abs(vcf_start - entry['start']) <= MATCH_TOLERANCE and abs(vcf_end - entry['end']) <= MATCH_TOLERANCE:
-            return entry
-    return None
+            matches.append(entry)
+    return matches
 
 
 def parse_info(info_str: str) -> dict[str, str]:
@@ -193,30 +183,20 @@ def highlight_motifs_in_sequence(sequence: str, motif: str) -> str:
 
 
 def compute_allele_repeat_units(
-    period: int,
-    gb_str: str,
-    info_start: int,
-    info_end: int,
     gt_indices: list[int],
     alt_alleles: list[str],
+    ref_seq: str,
     motif: str,
 ) -> tuple[float, float]:
-    """Compute repeat unit counts for both alleles from GT, GB, and alt sequences."""
-    ref_copies = (info_end - info_start + 1) / period
-
-    gb_sep = '|' if '|' in gb_str else '/'
-    gb_parts = gb_str.split(gb_sep)
+    """Compute repeat unit counts for both alleles via motif counting."""
+    ref_motif_count = count_motif_in_sequence(ref_seq, motif)
 
     alleles: list[float] = []
-    for i, allele_idx in enumerate(gt_indices):
+    for allele_idx in gt_indices:
         if allele_idx > 0 and allele_idx <= len(alt_alleles) and alt_alleles[allele_idx - 1] != '.':
             alleles.append(float(count_motif_in_sequence(alt_alleles[allele_idx - 1], motif)))
         else:
-            try:
-                bp_diff = int(gb_parts[i]) if i < len(gb_parts) else 0
-            except ValueError:
-                bp_diff = 0
-            alleles.append(math.floor(ref_copies + bp_diff / period))
+            alleles.append(float(ref_motif_count))
 
     return alleles[0], alleles[1]
 
@@ -360,19 +340,14 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dic
             vcf_start = int(info.get('START', cols[1]))
             vcf_end = int(info.get('END', vcf_start))
 
-            match = find_matching_locus(chrom, vcf_start, vcf_end, locus_index)
-            if match is None:
-                continue
-
-            locus_id = match['locus_id']
-            if locus_id in results:
-                continue
-
-            meta = strchive.get(locus_id)
-            if meta is None:
-                continue
-
-            results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info)
+            for match in find_matching_loci(chrom, vcf_start, vcf_end, locus_index):
+                locus_id = match['locus_id']
+                if locus_id in results:
+                    continue
+                meta = strchive.get(locus_id)
+                if meta is None:
+                    continue
+                results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info)
 
     _add_missing_loci(results, locus_index, strchive)
 
@@ -393,7 +368,8 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dic
 def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
     """Extract genotype data and classify alleles for a single VCF record."""
     sample_data = parse_format_sample(cols[8], cols[9])
-    period = int(info.get('PERIOD', meta.get('motif_len', 3)))
+    period_raw = info.get('PERIOD', str(meta.get('motif_len', 3)))
+    period = int(period_raw.split(',')[0])
     alt_alleles = cols[4].split(',') if cols[4] != '.' else []
 
     # Parse GT once, reuse for repeat counting and allele sequences
@@ -405,19 +381,16 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
     base['end'] = vcf_end
     base['period'] = period
 
+    ref_seq = cols[3]
     a1, a2 = compute_allele_repeat_units(
-        period,
-        sample_data.get('GB', '0|0'),
-        vcf_start,
-        vcf_end,
         gt_indices,
         alt_alleles,
+        ref_seq,
         base['primary_motif'],
     )
 
     s1 = classify_allele(a1, meta)
     s2 = classify_allele(a2, meta)
-    ref_seq = cols[3]
 
     base.update(
         {
