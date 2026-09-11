@@ -7,8 +7,6 @@ import datetime
 import json
 import re
 
-import loguru
-
 from hailtop.batch.job import Job
 
 from cpg_utils import Path, config, hail_batch
@@ -62,19 +60,17 @@ def get_sg_metadata(
     sg_metadata: dict[str, dict[str, str | int]] = {}
     for group in project.get('sequencingGroups', []):
         sg_id = group.get('id')
-        try:
-            sample = group['sample']
-            participant = sample['participant']
-            sg_metadata[sg_id] = {
-                'family_id': participant['families'][0]['externalId'],
-                'external_id': participant['externalId'],
-                'ext_sample': sample.get('externalId', ''),
-                'affected': participant['familyParticipants'][0]['affected'],
-            }
-        except (KeyError, IndexError, TypeError):
-            if sg_id in sg_ids:
-                loguru.logger.warning(f'Missing metadata for {sg_id}')
-            continue
+        sample = group.get('sample', {})
+        participant = sample.get('participant', {})
+        families = participant.get('families', [])
+        family_participants = participant.get('familyParticipants', [])
+
+        sg_metadata[sg_id] = {
+            'family_id': families[0]['externalId'] if families else '',
+            'external_id': participant.get('externalId', ''),
+            'ext_sample': sample.get('externalId', ''),
+            'affected': family_participants[0]['affected'] if family_participants else 0,
+        }
 
     return sg_metadata, display_name
 
