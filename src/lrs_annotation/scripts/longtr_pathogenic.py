@@ -203,11 +203,27 @@ def compute_allele_repeat_units(
 
 def classify_allele(repeat_units: float, locus_meta: dict) -> str:
     """Classify a repeat count as normal/intermediate/pathogenic/uncertain."""
+    benign_min = locus_meta.get('benign_min')
     benign_max = locus_meta.get('benign_max')
     intermediate_min = locus_meta.get('intermediate_min')
     intermediate_max = locus_meta.get('intermediate_max')
     pathogenic_min = locus_meta.get('pathogenic_min')
+    pathogenic_max = locus_meta.get('pathogenic_max')
 
+    # Contraction/discrete disorder: pathogenic range is below benign range.
+    # Check benign first, then pathogenic, since ranges may overlap.
+    if pathogenic_min is not None and benign_min is not None and pathogenic_min < benign_min:
+        if benign_min <= repeat_units <= (benign_max if benign_max is not None else benign_min):
+            return 'normal'
+        if intermediate_min is not None and intermediate_max is not None:
+            if intermediate_min <= repeat_units <= intermediate_max:
+                return 'intermediate'
+        p_max = pathogenic_max if pathogenic_max is not None else pathogenic_min
+        if pathogenic_min <= repeat_units <= p_max:
+            return 'pathogenic'
+        return 'uncertain'
+
+    # Standard expansion logic
     if pathogenic_min is not None and repeat_units >= pathogenic_min:
         return 'pathogenic'
     if (
@@ -273,9 +289,9 @@ def _parse_allreads(allreads_str: str, vcf_start: int, vcf_end: int, period: int
     return read_alleles
 
 
-def _build_external_links(meta: dict) -> list[dict]:
+def _build_external_links(meta: dict, locus_id: str) -> list[dict]:
     """Build external database links from STRchive metadata."""
-    links = []
+    links = [{'label': 'STRchive', 'url': f'https://strchive.org/loci/{locus_id.lower()}/'}]
     for key, label, url_template in EXTERNAL_LINK_DEFS:
         ids = meta.get(key, [])
         if ids:
@@ -307,7 +323,7 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
         'pathogenic_max': meta.get('pathogenic_max'),
         'ref_copies': meta.get('ref_copies'),
         'evidence': ', '.join(meta.get('evidence', [])),
-        'external_links': _build_external_links(meta),
+        'external_links': _build_external_links(meta, entry['locus_id']),
     }
 
 
