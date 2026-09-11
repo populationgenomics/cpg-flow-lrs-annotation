@@ -125,7 +125,7 @@
             <tr>
               <td><strong>{{ list_name | replace('_', ' ') | title }}</strong></td>
               <td>{{ loci | length }}</td>
-              <td>{{ loci | join(', ') }}</td>
+              <td>{{ loci | map('gene_name') | join(', ') }}</td>
             </tr>
             {% endfor %}
           </tbody>

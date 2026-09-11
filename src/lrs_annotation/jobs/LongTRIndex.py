@@ -3,6 +3,7 @@ Job to generate an index HTML page linking to all LongTR pathogenic reports
 for a dataset, with sample metadata from metamist.
 """
 
+import datetime
 import json
 import re
 
@@ -21,6 +22,7 @@ METADATA_QUERY = gql(
             sequencingGroups(id: {in_: $sgIds}) {
                 id
                 sample {
+                    externalId
                     participant {
                         externalId
                         families {
@@ -61,10 +63,12 @@ def get_sg_metadata(
     for group in project.get('sequencingGroups', []):
         sg_id = group.get('id')
         try:
-            participant = group['sample']['participant']
+            sample = group['sample']
+            participant = sample['participant']
             sg_metadata[sg_id] = {
                 'family_id': participant['families'][0]['externalId'],
                 'external_id': participant['externalId'],
+                'ext_sample': sample.get('externalId', ''),
                 'affected': participant['familyParticipants'][0]['affected'],
             }
         except (KeyError, IndexError, TypeError):
@@ -110,11 +114,21 @@ def longtr_index_page(
     file_prefix = config.config_retrieve(['storage', dataset_name, 'web'])
     html_prefix = config.config_retrieve(['storage', dataset_name, 'web_url'])
 
+    local_json_files: list[tuple[str, str, object]] = []
+    for sg_id, output_dict in sg_report_outputs.items():
+        json_keys = [k for k in list(output_dict.keys()) if k.endswith('_json') or k == 'json']
+        for json_key in json_keys:
+            report_type = json_key.removesuffix('_json') if json_key != 'json' else 'default'
+            local_json = hail_batch.get_batch().read_input(str(output_dict.pop(json_key)))
+            local_json_files.append((sg_id, report_type, local_json))
+
+    today = datetime.date.today().isoformat()
     manifest_data = []
     for sg_id, output_dict in sg_report_outputs.items():
         meta = sg_metadata.get(sg_id, {})
         family_id = meta.get('family_id', '')
         external_id = meta.get('external_id', '')
+        ext_sample = meta.get('ext_sample', '')
         affected_status = _affected_label(meta.get('affected', 0))
 
         for key, report_path in output_dict.items():
@@ -127,20 +141,29 @@ def longtr_index_page(
                     'sample': sg_id,
                     'family_id': family_id,
                     'external_id': external_id,
+                    'ext_sample': ext_sample,
                     'affected_status': affected_status,
                     'report_type': report_type,
+                    'date': today,
                     'url': url,
                 }
             )
 
     manifest = {'reports': manifest_data, 'loci_lists': loci_lists}
+    json_map_lines = '\n'.join(f'{sg_id}\t{rt}\t{lj}' for sg_id, rt, lj in local_json_files)
+
     job.command(f"""
     cat > {job.manifest} << 'MANIFEST_EOF'
 {json.dumps(manifest, indent=2)}
 MANIFEST_EOF
 
+    cat > {job.json_map} << 'MAP_EOF'
+{json_map_lines}
+MAP_EOF
+
     python3 {longtr_index.__file__} \\
         --manifest {job.manifest} \\
+        --json-map {job.json_map} \\
         --dataset '{dataset_title}' \\
         --output {job.output}
     """)
