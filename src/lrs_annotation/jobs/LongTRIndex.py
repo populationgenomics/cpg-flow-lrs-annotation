@@ -157,7 +157,7 @@ def longtr_index_page(
 {json.dumps(manifest, indent=2)}
 MANIFEST_EOF
 
-    cat > {job.json_map} << 'MAP_EOF'
+    cat > {job.json_map} << MAP_EOF
 {json_map_lines}
 MAP_EOF
 
