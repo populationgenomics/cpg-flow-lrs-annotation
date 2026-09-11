@@ -57,7 +57,8 @@ def load_json_map(json_map_path: str) -> dict[tuple[str, str], str]:
             if not line.strip():
                 continue
             parts = line.strip().split('\t')
-            if len(parts) >= 3:
+            min_tsv_columns = 3
+            if len(parts) >= min_tsv_columns:
                 mapping[(parts[0], parts[1])] = parts[2]
     return mapping
 
@@ -85,7 +86,7 @@ def enrich_manifest_from_json(
                     missing.append(locus['gene'])
             item['flagged_loci'] = flagged
             item['missing_loci'] = missing
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, KeyError) as e:
             print(f'Warning: could not read {json_path}: {e}')
 
 
@@ -136,7 +137,9 @@ def main(manifest: str, dataset_name: str, output: str, json_map_path: str | Non
 if __name__ == '__main__':
     parser = ArgumentParser(description='Generate an index page for LongTR pathogenic reports')
     parser.add_argument('--manifest', required=True, help='JSON manifest listing all reports')
-    parser.add_argument('--json-map', dest='json_map', default=None, help='TSV mapping sg_id/report_type to JSON report paths')
+    parser.add_argument(
+        '--json-map', dest='json_map', default=None, help='TSV mapping sg_id/report_type to JSON report paths'
+    )
     parser.add_argument('--dataset', required=True, help='Dataset name')
     parser.add_argument('--output', required=True, help='Output HTML file path')
     args = parser.parse_args()

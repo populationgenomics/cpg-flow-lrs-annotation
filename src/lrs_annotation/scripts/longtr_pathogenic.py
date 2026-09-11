@@ -201,7 +201,7 @@ def compute_allele_repeat_units(
     return alleles[0], alleles[1]
 
 
-def classify_allele(repeat_units: float, locus_meta: dict) -> str:
+def classify_allele(repeat_units: float, locus_meta: dict) -> str:  # noqa: PLR0911
     """Classify a repeat count as normal/intermediate/pathogenic/uncertain."""
     benign_min = locus_meta.get('benign_min')
     benign_max = locus_meta.get('benign_max')
@@ -215,9 +215,12 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:
     if pathogenic_min is not None and benign_min is not None and pathogenic_min < benign_min:
         if benign_min <= repeat_units <= (benign_max if benign_max is not None else benign_min):
             return 'normal'
-        if intermediate_min is not None and intermediate_max is not None:
-            if intermediate_min <= repeat_units <= intermediate_max:
-                return 'intermediate'
+        if (
+            intermediate_min is not None
+            and intermediate_max is not None
+            and intermediate_min <= repeat_units <= intermediate_max
+        ):
+            return 'intermediate'
         p_max = pathogenic_max if pathogenic_max is not None else pathogenic_min
         if pathogenic_min <= repeat_units <= p_max:
             return 'pathogenic'
@@ -234,9 +237,9 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:
         return 'intermediate'
     if benign_max is not None and repeat_units <= benign_max:
         return 'normal'
-    if benign_max is not None and pathogenic_min is not None and benign_max < repeat_units < pathogenic_min:
-        return 'intermediate'
     if benign_max is not None and repeat_units > benign_max:
+        if pathogenic_min is not None and repeat_units < pathogenic_min:
+            return 'intermediate'
         return 'uncertain'
     return 'normal'
 

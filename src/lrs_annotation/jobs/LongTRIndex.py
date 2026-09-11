@@ -122,7 +122,7 @@ def longtr_index_page(
             local_json = hail_batch.get_batch().read_input(str(output_dict.pop(json_key)))
             local_json_files.append((sg_id, report_type, local_json))
 
-    today = datetime.date.today().isoformat()
+    today = datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
     manifest_data = []
     for sg_id, output_dict in sg_report_outputs.items():
         meta = sg_metadata.get(sg_id, {})
