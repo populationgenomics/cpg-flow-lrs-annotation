@@ -33,6 +33,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import jinja2
+from loguru import logger
 from markupsafe import Markup
 
 MIN_BED_COLUMNS = 5
@@ -193,7 +194,7 @@ def compute_allele_repeat_units(
 
     alleles: list[float] = []
     for allele_idx in gt_indices:
-        if allele_idx > 0 and allele_idx <= len(alt_alleles) and alt_alleles[allele_idx - 1] != '.':
+        if 0 < allele_idx <= len(alt_alleles) and alt_alleles[allele_idx - 1] != '.':
             alleles.append(float(count_motif_in_sequence(alt_alleles[allele_idx - 1], motif)))
         else:
             alleles.append(float(ref_motif_count))
@@ -266,7 +267,7 @@ def _parse_gt_indices(gt_str: str) -> list[int]:
 
 def _resolve_allele_seq(gt_idx: int, alt_alleles: list[str], ref_seq: str) -> str:
     """Return the allele sequence for a GT index (ref or alt)."""
-    if gt_idx > 0 and gt_idx <= len(alt_alleles):
+    if 0 < gt_idx <= len(alt_alleles):
         return alt_alleles[gt_idx - 1]
     return ref_seq
 
@@ -426,7 +427,7 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
             'pq': sample_data.get('PQ', '.'),
             'gldiff': sample_data.get('GLDIFF', '.'),
             'gt': sample_data.get('GT', '.'),
-            'filter': sample_data.get('FILTER', '.'),
+            'filter': cols[6],
             'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
             'genotyped': True,
         }
@@ -680,14 +681,14 @@ def generate_report(
     def _fmt_ru(v) -> str:
         return f'{v:.0f}' if v == int(v) else f'{v:.1f}'
 
-    print(f'Screened {len(results)} disease loci ({summary["genotyped"]} genotyped)')
+    logger.info(f'Screened {len(results)} disease loci ({summary["genotyped"]} genotyped)')
     for r in results:
         if r['locus_status'] in ('pathogenic', 'intermediate', 'uncertain'):
             a1_str = _fmt_ru(r['allele1_ru'])
             a2_str = _fmt_ru(r['allele2_ru'])
-            print(f'  ⚠ {r["gene"]} ({r["disease"]}): {r["locus_status"]} — {a1_str}/{a2_str} repeats')
-    print(f'HTML report: {output_html}')
-    print(f'JSON results: {output_json}')
+            logger.warning(f'{r["gene"]} ({r["disease"]}): {r["locus_status"]} — {a1_str}/{a2_str} repeats')
+    logger.info(f'HTML report: {output_html}')
+    logger.info(f'JSON results: {output_json}')
 
 
 def cli_main():

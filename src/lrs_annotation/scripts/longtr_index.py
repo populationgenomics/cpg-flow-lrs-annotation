@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import jinja2
+from loguru import logger
 
 
 @dataclass
@@ -87,7 +88,7 @@ def enrich_manifest_from_json(
             item['flagged_loci'] = flagged
             item['missing_loci'] = missing
         except (OSError, json.JSONDecodeError, KeyError) as e:
-            print(f'Warning: could not read {json_path}: {e}')
+            logger.warning(f'Could not read {json_path}: {e}')
 
 
 def build_entries_from_reports(report_items: list[dict]) -> list[IndexEntry]:
