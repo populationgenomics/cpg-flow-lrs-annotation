@@ -202,7 +202,7 @@ def compute_allele_repeat_units(
 
 
 def classify_allele(repeat_units: float, locus_meta: dict) -> str:  # noqa: PLR0911
-    """Classify a repeat count as normal/intermediate/pathogenic/uncertain."""
+    """Classify a repeat count against STRchive thresholds, handling both expansion and contraction disorders."""
     benign_min = locus_meta.get('benign_min')
     benign_max = locus_meta.get('benign_max')
     intermediate_min = locus_meta.get('intermediate_min')
@@ -465,96 +465,10 @@ def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
         results[lid] = base
 
 
-def _gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result) -> list[str]:
-    """Render SVG colored rectangles for benign/intermediate/pathogenic zones."""
-    parts = []
-    benign_max = result['benign_max']
-    pathogenic_min = result['pathogenic_min']
-    intermediate_min = result['intermediate_min']
-    intermediate_max = result['intermediate_max']
-
-    if benign_max is not None:
-        bw = x_pos(benign_max) - margin_l
-        parts.append(
-            f'<rect x="{margin_l}" y="{bar_y}" width="{bw}" height="{bar_h}" fill="#28a745" opacity="0.5" rx="3"/>'
-        )
-
-    if intermediate_min is not None and intermediate_max is not None:
-        ix1, ix2 = x_pos(intermediate_min), x_pos(intermediate_max)
-        parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2 - ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
-    elif benign_max is not None and pathogenic_min is not None and pathogenic_min > benign_max + 1:
-        ix1, ix2 = x_pos(benign_max), x_pos(pathogenic_min)
-        parts.append(f'<rect x="{ix1}" y="{bar_y}" width="{ix2 - ix1}" height="{bar_h}" fill="#ffc107" opacity="0.5"/>')
-
-    if pathogenic_min is not None:
-        px1 = x_pos(pathogenic_min)
-        parts.append(
-            f'<rect x="{px1}" y="{bar_y}" width="{margin_l + bar_w - px1}" height="{bar_h}"'
-            ' fill="#dc3545" opacity="0.5" rx="3"/>'
-        )
-    return parts
-
-
-def _gauge_ticks(x_pos, bar_y, bar_h, result) -> list[str]:
-    """Render SVG tick marks and labels at threshold boundaries."""
-    tick_values = {
-        v
-        for v in [
-            0,
-            result['benign_max'],
-            result['intermediate_min'],
-            result['intermediate_max'],
-            result['pathogenic_min'],
-        ]
-        if v is not None
-    }
-    parts = []
-    min_gap = 30
-    last_x = -999.0
-    for tv in sorted(tick_values):
-        tx = x_pos(tv)
-        ty = bar_y + bar_h
-        parts.append(
-            f'<line x1="{tx}" y1="{bar_y}" x2="{tx}" y2="{ty}"'
-            ' stroke="#333" stroke-width="0.5" stroke-dasharray="2,1"/>',
-        )
-        if tx - last_x >= min_gap:
-            parts.append(
-                f'<text x="{tx}" y="{ty + 11}" text-anchor="middle" font-size="9" fill="#666">{tv:.0f}</text>',
-            )
-            last_x = tx
-    return parts
-
-
-def _gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result) -> list[str]:
-    """Render SVG markers for allele positions and supporting read dots."""
-    parts = []
-    for ra in result.get('read_alleles', []):
-        if ra <= scale_max:
-            rx, cy = x_pos(ra), bar_y + bar_h / 2
-            parts.append(f'<circle cx="{rx}" cy="{cy}" r="2" fill="rgba(100,100,100,0.15)" stroke="none"/>')
-
-    for allele_val, color in [(a1, '#0d6efd'), (a2, '#6610f2')]:
-        if allele_val is None:
-            continue
-        ax = x_pos(min(allele_val, scale_max))
-        parts.append(
-            f'<line x1="{ax}" y1="{bar_y - 2}" x2="{ax}"'
-            f' y2="{bar_y + bar_h + 2}" stroke="{color}" stroke-width="2.5"/>',
-        )
-        parts.append(f'<circle cx="{ax}" cy="{bar_y - 5}" r="4" fill="{color}"/>')
-        label_text = f'{allele_val:.0f}' if allele_val == int(allele_val) else f'{allele_val:.1f}'
-        parts.append(
-            f'<text x="{ax}" y="{bar_y - 10}" text-anchor="middle"'
-            f' font-size="8" font-weight="bold" fill="{color}">{label_text}</text>',
-        )
-    return parts
-
-
-def svg_gauge(result: dict, width: int = 600) -> str:
-    """Build a complete SVG gauge visualization for a locus result."""
+def _compute_gauge_model(result: dict, width: int = 600) -> dict | None:
+    """Compute gauge geometry: zones, ticks, and allele markers as coordinates."""
     if not result['genotyped']:
-        return '<div class="gauge-placeholder">Not genotyped — locus not found in VCF</div>'
+        return None
 
     a1 = result['allele1_ru']
     a2 = result['allele2_ru']
@@ -562,7 +476,7 @@ def svg_gauge(result: dict, width: int = 600) -> str:
         v for v in [a1, a2, result['benign_max'], result['pathogenic_min'], result['intermediate_max']] if v is not None
     ]
     if not scale_values:
-        return '<div class="gauge-placeholder">No threshold data available</div>'
+        return None
 
     scale_max = max(max(scale_values) * 1.3, 10)
     h, bar_y, bar_h, margin_l = 70, 25, 20, 10
@@ -571,15 +485,59 @@ def svg_gauge(result: dict, width: int = 600) -> str:
     def x_pos(val) -> float:
         return margin_l + (val / scale_max) * bar_w
 
-    svg_parts = [
-        f'<svg viewBox="0 0 {width} {h}" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">',
-        f'<rect x="{margin_l}" y="{bar_y}" width="{bar_w}" height="{bar_h}" fill="#e9ecef" rx="3"/>',
-    ]
-    svg_parts.extend(_gauge_threshold_zones(x_pos, bar_y, bar_h, margin_l, bar_w, result))
-    svg_parts.extend(_gauge_ticks(x_pos, bar_y, bar_h, result))
-    svg_parts.extend(_gauge_allele_markers(x_pos, bar_y, bar_h, a1, a2, scale_max, result))
-    svg_parts.append('</svg>')
-    return '\n'.join(svg_parts)
+    benign_max = result['benign_max']
+    pathogenic_min = result['pathogenic_min']
+    intermediate_min = result['intermediate_min']
+    intermediate_max = result['intermediate_max']
+
+    zones = []
+    if benign_max is not None:
+        zones.append({'x': margin_l, 'w': x_pos(benign_max) - margin_l, 'color': '#28a745', 'rx': 3})
+    if intermediate_min is not None and intermediate_max is not None:
+        ix1, ix2 = x_pos(intermediate_min), x_pos(intermediate_max)
+        zones.append({'x': ix1, 'w': ix2 - ix1, 'color': '#ffc107'})
+    elif benign_max is not None and pathogenic_min is not None and pathogenic_min > benign_max + 1:
+        ix1, ix2 = x_pos(benign_max), x_pos(pathogenic_min)
+        zones.append({'x': ix1, 'w': ix2 - ix1, 'color': '#ffc107'})
+    if pathogenic_min is not None:
+        px1 = x_pos(pathogenic_min)
+        zones.append({'x': px1, 'w': margin_l + bar_w - px1, 'color': '#dc3545', 'rx': 3})
+
+    tick_values = sorted(
+        {v for v in [0, benign_max, intermediate_min, intermediate_max, pathogenic_min] if v is not None},
+    )
+    min_gap = 30
+    last_x = -999.0
+    ticks = []
+    for tv in tick_values:
+        tx = x_pos(tv)
+        show_label = tx - last_x >= min_gap
+        ticks.append({'x': tx, 'label': f'{tv:.0f}', 'show_label': show_label})
+        if show_label:
+            last_x = tx
+
+    read_dots = [{'cx': x_pos(ra)} for ra in result.get('read_alleles', []) if ra <= scale_max]
+
+    markers = []
+    for allele_val, color in [(a1, '#0d6efd'), (a2, '#6610f2')]:
+        if allele_val is None:
+            continue
+        ax = x_pos(min(allele_val, scale_max))
+        label = f'{allele_val:.0f}' if allele_val == int(allele_val) else f'{allele_val:.1f}'
+        markers.append({'x': ax, 'color': color, 'label': label})
+
+    return {
+        'width': width,
+        'h': h,
+        'bar_y': bar_y,
+        'bar_h': bar_h,
+        'margin_l': margin_l,
+        'bar_w': bar_w,
+        'zones': zones,
+        'ticks': ticks,
+        'read_dots': read_dots,
+        'markers': markers,
+    }
 
 
 def status_badge(status: str) -> str:
@@ -615,7 +573,7 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
         loader=jinja2.FileSystemLoader(str(template_dir)),
         autoescape=True,
     )
-    env.globals['svg_gauge'] = lambda r: Markup(svg_gauge(r))  # noqa: S704
+    env.globals['gauge_model'] = _compute_gauge_model
     env.globals['status_badge'] = lambda s: Markup(status_badge(s))  # noqa: S704
     env.globals['highlight_seq'] = lambda seq, motif: Markup(highlight_motifs_in_sequence(seq, motif))  # noqa: S704
 

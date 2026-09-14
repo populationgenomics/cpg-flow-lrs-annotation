@@ -206,6 +206,35 @@
 </div>
 {% endif %}
 
+{% macro render_gauge(r, g) %}
+{% if not r.genotyped %}
+<div class="gauge-placeholder">Not genotyped — locus not found in VCF</div>
+{% elif not g %}
+<div class="gauge-placeholder">No threshold data available</div>
+{% else %}
+<svg viewBox="0 0 {{ g.width }} {{ g.h }}" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">
+  <rect x="{{ g.margin_l }}" y="{{ g.bar_y }}" width="{{ g.bar_w }}" height="{{ g.bar_h }}" fill="#e9ecef" rx="3"/>
+  {% for z in g.zones %}
+  <rect x="{{ z.x }}" y="{{ g.bar_y }}" width="{{ z.w }}" height="{{ g.bar_h }}" fill="{{ z.color }}" opacity="0.5"{% if z.rx %} rx="{{ z.rx }}"{% endif %}/>
+  {% endfor %}
+  {% for t in g.ticks %}
+  <line x1="{{ t.x }}" y1="{{ g.bar_y }}" x2="{{ t.x }}" y2="{{ g.bar_y + g.bar_h }}" stroke="#333" stroke-width="0.5" stroke-dasharray="2,1"/>
+  {% if t.show_label %}
+  <text x="{{ t.x }}" y="{{ g.bar_y + g.bar_h + 11 }}" text-anchor="middle" font-size="9" fill="#666">{{ t.label }}</text>
+  {% endif %}
+  {% endfor %}
+  {% for d in g.read_dots %}
+  <circle cx="{{ d.cx }}" cy="{{ g.bar_y + g.bar_h / 2 }}" r="2" fill="rgba(100,100,100,0.15)" stroke="none"/>
+  {% endfor %}
+  {% for m in g.markers %}
+  <line x1="{{ m.x }}" y1="{{ g.bar_y - 2 }}" x2="{{ m.x }}" y2="{{ g.bar_y + g.bar_h + 2 }}" stroke="{{ m.color }}" stroke-width="2.5"/>
+  <circle cx="{{ m.x }}" cy="{{ g.bar_y - 5 }}" r="4" fill="{{ m.color }}"/>
+  <text x="{{ m.x }}" y="{{ g.bar_y - 10 }}" text-anchor="middle" font-size="8" font-weight="bold" fill="{{ m.color }}">{{ m.label }}</text>
+  {% endfor %}
+</svg>
+{% endif %}
+{% endmacro %}
+
 <div id="cards">
   {% for r in results %}
   {% set border_class = 'card-' + r.locus_status | replace('_', '-') %}
@@ -233,7 +262,7 @@
       {% endif %}
     </div>
     <div class="gauge-container">
-      {{ svg_gauge(r) }}
+      {{ render_gauge(r, gauge_model(r)) }}
     </div>
     {% if r.benign_max is not none or r.intermediate_min is not none or r.pathogenic_min is not none %}
     <div class="thresholds">
