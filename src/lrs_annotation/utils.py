@@ -39,7 +39,7 @@ def get_longtr_loci_lists(dataset: str) -> dict[str, list[str]]:
     Get the loci lists in scope for a given dataset for LongTR report subsetting.
     Reads from the production config at ['longtr', 'loci_lists'] and ['longtr', 'loci_lists_datasets'].
     Returns a mapping of list name to list of locus IDs.
-    If no lists are configured, returns an empty dict (= produce one report with all loci).
+    Falls back to the 'default' list when a dataset has no explicit mapping.
     """
     raw = config_retrieve(['longtr', 'loci_lists'], default=None)
     if not raw:
@@ -53,7 +53,11 @@ def get_longtr_loci_lists(dataset: str) -> dict[str, list[str]]:
 
     prod_dataset = dataset.removesuffix('-test')
     in_scope = [ll_name for ll_name, datasets in loci_list_datasets.items() if prod_dataset in datasets]
-    return {ll_name: loci for ll_name, loci in loci_lists.items() if ll_name in in_scope}
+    result = {ll_name: loci for ll_name, loci in loci_lists.items() if ll_name in in_scope}
+    if not result and 'default' in loci_lists:
+        logger.info(f'No loci lists configured for {prod_dataset}, falling back to default')
+        return {'default': loci_lists['default']}
+    return result
 
 
 def get_dataset_names(datasets: str | list[str]) -> list[str]:

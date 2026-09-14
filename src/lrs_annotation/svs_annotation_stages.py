@@ -78,6 +78,12 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
         outputs = self.expected_outputs(sequencing_group)
         loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
 
+        if not loci_lists:
+            logger.warning(
+                f'No loci lists configured for {sequencing_group.dataset.name}, '
+                f'report for {sequencing_group.id} will include all disease loci',
+            )
+
         job = longtr_pathogenic_report(
             vcf_path=vcf_path,
             outputs=outputs,
