@@ -53,6 +53,22 @@ LRS_IDS_QUERY = gql(
     """,
 )
 
+LONGTR_QUERY = gql(
+    """
+    query LongTRQuery($dataset: String!) {
+      project(name: $dataset) {
+        sequencingGroups(technology: {eq: "long-read"}) {
+          id
+          analyses(type: {eq: "longtr"}, active: {eq: true}) {
+            output
+            outputs
+          }
+        }
+      }
+    }
+    """,
+)
+
 
 def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     """
@@ -283,6 +299,22 @@ def get_lrs_id_from_sample(
         return ext_ids['lrs_id']
     # Final fallback to sample's meta field
     return sample['meta'].get('lrs_id', None)
+
+
+@cache
+def query_for_longtr_vcfs(dataset_name: str) -> dict[str, str]:
+    """
+    Query metamist for LongTR VCF analyses, returning a mapping of SG ID to VCF path.
+    """
+    dataset_name = dataset_for_access_level(dataset_name)
+    results = query(LONGTR_QUERY, variables={'dataset': dataset_name})
+    sg_vcfs: dict[str, str] = {}
+    for sg in results['project']['sequencingGroups']:
+        for analysis in sg['analyses']:
+            vcf_path = analysis.get('outputs', {}).get('path') or analysis.get('output', '')
+            if vcf_path:
+                sg_vcfs[sg['id']] = vcf_path
+    return sg_vcfs
 
 
 def get_sgs_from_datasets(multicohort_datasets: list[str]) -> tuple[list[str], dict]:
