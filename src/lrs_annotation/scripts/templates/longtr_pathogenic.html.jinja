@@ -136,6 +136,22 @@
       </dl>
     </div>
     <div class="glossary-section">
+      <h3>Modes of inheritance</h3>
+      <dl>
+        <dt>AD</dt>
+        <dd>Autosomal dominant &mdash; one affected copy is enough to cause disease.</dd>
+        <dt>AR</dt>
+        <dd>Autosomal recessive &mdash; both copies must be affected for disease to manifest.</dd>
+        <dt>XD</dt>
+        <dd>X-linked dominant &mdash; one affected copy on the X chromosome causes disease in either sex.</dd>
+        <dt>XR</dt>
+        <dd>X-linked recessive &mdash; affects males with a single affected copy; females usually require both.</dd>
+      </dl>
+      <p style="font-size:0.75rem; color:var(--muted); margin-top:6px;">
+        Some loci list more than one mode (e.g. &ldquo;AD, AR&rdquo;); these match either inheritance filter.
+      </p>
+    </div>
+    <div class="glossary-section">
       <h3>Evidence levels (STRchive)</h3>
       <dl>
         <dt>Definitive</dt>
@@ -193,6 +209,7 @@
   <button class="filter-btn status-filter active" onclick="filterStatus('all')">All ({{ results | length }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('pathogenic')">Pathogenic ({{ n_pathogenic }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('intermediate')">Intermediate ({{ n_intermediate }})</button>
+  <button class="filter-btn status-filter" onclick="filterStatus('uncertain')">Uncertain ({{ n_uncertain }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('normal')">Normal ({{ n_normal }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('not-genotyped')">Not Genotyped ({{ n_missing }})</button>
 </div>
@@ -205,12 +222,25 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if inheritance_levels %}
+<div class="filter-bar">
+  <span class="filter-label">Inheritance:</span>
+  <button class="filter-btn inheritance-filter active" onclick="filterInheritance('all')">All</button>
+  {% for mode in inheritance_levels %}
+  <button class="filter-btn inheritance-filter" title="{{ inheritance_names.get(mode, mode) }}" onclick="filterInheritance('{{ mode }}')">{{ mode }} ({{ inheritance_counts[mode] }})</button>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% macro render_gauge(r, g) %}
 {% if not r.genotyped %}
 <div class="gauge-placeholder">Not genotyped — locus not found in VCF</div>
 {% elif not g %}
+{% if r.thresholds %}
+<div class="gauge-placeholder">Only a few repeat counts are possible at this locus &mdash; see thresholds below</div>
+{% else %}
 <div class="gauge-placeholder">No threshold data available</div>
+{% endif %}
 {% else %}
 <svg viewBox="0 0 {{ g.width }} {{ g.h }}" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">
   <rect x="{{ g.margin_l }}" y="{{ g.bar_y }}" width="{{ g.bar_w }}" height="{{ g.bar_h }}" fill="#e9ecef" rx="3"/>
@@ -238,7 +268,7 @@
 <div id="cards">
   {% for r in results %}
   {% set border_class = 'card-' + r.locus_status | replace('_', '-') %}
-  <div class="locus-card {{ border_class }}" data-evidence="{{ r.evidence }}">
+  <div class="locus-card {{ border_class }}" data-evidence="{{ r.evidence }}" data-inheritance="{{ r.inheritance }}">
     <div class="card-header">
       <div class="card-title">
         <strong>{{ r.gene }}</strong> — {{ r.disease }}
@@ -264,12 +294,8 @@
     <div class="gauge-container">
       {{ render_gauge(r, gauge_model(r)) }}
     </div>
-    {% if r.benign_max is not none or r.intermediate_min is not none or r.pathogenic_min is not none %}
-    <div class="thresholds">
-      {%- if r.benign_max is not none %}Normal: &le;{{ r.benign_max }}{% endif %}
-      {%- if r.intermediate_min is not none and r.intermediate_max is not none %}{% if r.benign_max is not none %} &middot; {% endif %}Intermediate: {{ r.intermediate_min }}&ndash;{{ r.intermediate_max }}{% endif %}
-      {%- if r.pathogenic_min is not none %}{% if r.benign_max is not none or (r.intermediate_min is not none and r.intermediate_max is not none) %} &middot; {% endif %}Pathogenic: &ge;{{ r.pathogenic_min }}{% endif %}
-    </div>
+    {% if r.thresholds %}
+    <div class="thresholds">{{ r.thresholds | join(' · ') }}</div>
     {% endif %}
     {% if r.genotyped and r.allele1_ru is not none %}
     <div class="allele-row">
@@ -310,6 +336,7 @@
 <script>
 let activeStatus = 'all';
 let activeEvidence = 'all';
+let activeInheritance = 'all';
 
 function filterStatus(status) {
   activeStatus = status;
@@ -325,11 +352,21 @@ function filterEvidence(evidence) {
   applyFilters();
 }
 
+function filterInheritance(mode) {
+  activeInheritance = mode;
+  document.querySelectorAll('.inheritance-filter').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  applyFilters();
+}
+
 function applyFilters() {
   document.querySelectorAll('.locus-card').forEach(card => {
     const statusMatch = activeStatus === 'all' || card.classList.contains('card-' + activeStatus);
     const evidenceMatch = activeEvidence === 'all' || card.dataset.evidence === activeEvidence;
-    card.style.display = (statusMatch && evidenceMatch) ? '' : 'none';
+    // a locus may list several modes, so match on membership rather than the whole string
+    const modes = (card.dataset.inheritance || '').split(',').map(s => s.trim()).filter(Boolean);
+    const inheritanceMatch = activeInheritance === 'all' || modes.includes(activeInheritance);
+    card.style.display = (statusMatch && evidenceMatch && inheritanceMatch) ? '' : 'none';
   });
 }
 </script>

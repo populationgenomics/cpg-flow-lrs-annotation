@@ -41,6 +41,13 @@ MIN_VCF_COLUMNS = 10
 
 MATCH_TOLERANCE = 20
 
+INHERITANCE_NAMES = {
+    'AD': 'Autosomal dominant',
+    'AR': 'Autosomal recessive',
+    'XD': 'X-linked dominant',
+    'XR': 'X-linked recessive',
+}
+
 EXTERNAL_LINK_DEFS = [
     ('omim', 'OMIM', 'https://omim.org/entry/{}'),
     ('genereviews', 'GeneReviews', 'https://www.ncbi.nlm.nih.gov/books/{}'),
@@ -303,6 +310,43 @@ def _build_external_links(meta: dict, locus_id: str) -> list[dict]:
     return links
 
 
+def _threshold_parts(meta: dict) -> list[str]:
+    """Summarise a locus's thresholds for display, enumerating counts for discrete/contraction loci."""
+    benign_min = meta.get('benign_min')
+    benign_max = meta.get('benign_max')
+    intermediate_min = meta.get('intermediate_min')
+    intermediate_max = meta.get('intermediate_max')
+    pathogenic_min = meta.get('pathogenic_min')
+    pathogenic_max = meta.get('pathogenic_max')
+
+    # Discrete/contraction loci (VWA1, MIR7-2) put their pathogenic range below the benign one,
+    # so '<=benign / >=pathogenic' would contradict itself. The ranges are only a few counts
+    # wide, so label each one via classify_allele rather than restating its precedence rules.
+    if pathogenic_min is not None and benign_min is not None and pathogenic_min < benign_min:
+        lo = int(pathogenic_min)
+        hi = int(max(benign_max or benign_min, pathogenic_max or pathogenic_min))
+        by_status: dict[str, list[int]] = defaultdict(list)
+        for count in range(lo, hi + 1):
+            by_status[classify_allele(count, meta)].append(count)
+
+        parts = [
+            f'{label}: ' + ', '.join(str(c) for c in by_status[status])
+            for status, label in (('normal', 'Normal'), ('intermediate', 'Intermediate'), ('pathogenic', 'Pathogenic'))
+            if by_status[status]
+        ]
+        parts.append('any other count: uncertain')
+        return parts
+
+    parts = []
+    if benign_max is not None:
+        parts.append(f'Normal: ≤{benign_max}')
+    if intermediate_min is not None and intermediate_max is not None:
+        parts.append(f'Intermediate: {intermediate_min}-{intermediate_max}')
+    if pathogenic_min is not None:
+        parts.append(f'Pathogenic: ≥{pathogenic_min}')
+    return parts
+
+
 def _build_locus_meta(meta: dict, entry: dict) -> dict:
     """Assemble shared locus metadata from STRchive and BED entry fields."""
     motif_list = meta.get('reference_motif_reference_orientation', entry['motifs'])
@@ -326,6 +370,7 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
         'pathogenic_min': meta.get('pathogenic_min'),
         'pathogenic_max': meta.get('pathogenic_max'),
         'ref_copies': meta.get('ref_copies'),
+        'thresholds': _threshold_parts(meta),
         'evidence': ', '.join(meta.get('evidence', [])),
         'external_links': _build_external_links(meta, entry['locus_id']),
     }
@@ -471,6 +516,14 @@ def _compute_gauge_model(result: dict, width: int = 600) -> dict | None:
     if not result['genotyped']:
         return None
 
+    # Discrete/contraction loci span only a few counts with the pathogenic range below the
+    # benign one, so a continuous bar would paint overlapping zones that contradict the
+    # enumerated threshold text. Those few values are better read from the text alone.
+    benign_min = result.get('benign_min')
+    pathogenic_min = result.get('pathogenic_min')
+    if pathogenic_min is not None and benign_min is not None and pathogenic_min < benign_min:
+        return None
+
     a1 = result['allele1_ru']
     a2 = result['allele2_ru']
     scale_values = [
@@ -583,6 +636,13 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
     evidence_levels = sorted({r.get('evidence', '') for r in results if r.get('evidence')})
     evidence_counts = {level: sum(1 for r in results if r.get('evidence') == level) for level in evidence_levels}
 
+    # A locus can carry several modes (e.g. 'AD, AR'), so count membership rather than the whole string
+    modes_per_result = [[m.strip() for m in r.get('inheritance', '').split(',') if m.strip()] for r in results]
+    inheritance_levels = sorted({m for modes in modes_per_result for m in modes})
+    inheritance_counts = {
+        mode: sum(1 for modes in modes_per_result if mode in modes) for mode in inheritance_levels
+    }
+
     return template.render(
         sample_name=sample_name,
         report_type=report_type,
@@ -595,6 +655,9 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
         n_missing=summary.get('not_genotyped', 0),
         evidence_levels=evidence_levels,
         evidence_counts=evidence_counts,
+        inheritance_levels=inheritance_levels,
+        inheritance_counts=inheritance_counts,
+        inheritance_names=INHERITANCE_NAMES,
     )
 
 
