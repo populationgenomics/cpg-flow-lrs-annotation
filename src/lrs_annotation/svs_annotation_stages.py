@@ -94,7 +94,7 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)
 
 
-@stage.stage(analysis_type='web', analysis_keys=['index'], required_stages=[LongTRPathogenicReport])
+@stage.stage(analysis_type='web', analysis_keys=['latest'], required_stages=[LongTRPathogenicReport])
 class LongTRIndexPage(stage.DatasetStage):
     """
     Generate an index HTML page linking to all LongTR pathogenic reports in a dataset.
@@ -102,8 +102,11 @@ class LongTRIndexPage(stage.DatasetStage):
 
     def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
         prefix = dataset.web_prefix() / 'longtr'
+        loci_version = str(config_retrieve(['longtr', 'loci_version'], default='unversioned'))
+        # 'latest' is a stable URL collaborators can bookmark, overwritten by each run
         return {
-            'index': prefix / f'{dataset.name}_longtr_index.html',
+            'index': prefix / loci_version / f'{dataset.name}_longtr_index.html',
+            'latest': prefix / f'{dataset.name}_longtr_index.html',
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
@@ -119,6 +122,7 @@ class LongTRIndexPage(stage.DatasetStage):
             sg_report_outputs=sg_report_outputs,
             loci_lists=loci_lists,
             output_path=outputs['index'],
+            latest_path=outputs['latest'],
             manifest_path=dataset.tmp_prefix() / 'longtr' / 'index_manifest.json',
             job_attrs=self.get_job_attrs(dataset),
         )

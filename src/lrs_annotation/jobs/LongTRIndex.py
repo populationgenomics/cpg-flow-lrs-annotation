@@ -93,6 +93,7 @@ def longtr_index_page(
     sg_report_outputs: dict[str, dict[str, Path]],
     loci_lists: dict[str, list[str]],
     output_path: Path,
+    latest_path: Path,
     manifest_path: Path,
     job_attrs: dict[str, str],
 ) -> Job:
@@ -166,4 +167,5 @@ def longtr_index_page(
     job.command(f'python3 {longtr_index.__file__} ' + ' '.join(args))
 
     batch_instance.write_output(job.output, str(output_path))
+    batch_instance.write_output(job.output, str(latest_path))
     return job
