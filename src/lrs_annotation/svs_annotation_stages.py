@@ -49,7 +49,8 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        prefix = sequencing_group.dataset.web_prefix() / 'longtr'
+        loci_version = str(config_retrieve(['longtr', 'loci_version'], default='unversioned'))
+        prefix = sequencing_group.dataset.web_prefix() / 'longtr' / loci_version
         sg_id = sequencing_group.id
         loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
 
