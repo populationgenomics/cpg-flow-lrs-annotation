@@ -50,17 +50,12 @@ def load_manifest(manifest_path: str) -> tuple[list[dict], dict[str, list[str]]]
     return raw.get('reports', []), raw.get('loci_lists', {})
 
 
-def load_json_map(json_map_path: str) -> dict[tuple[str, str], str]:
-    """Parse a TSV mapping of sg_id, report_type, json_path."""
+def parse_json_entries(entries: list[str]) -> dict[tuple[str, str], str]:
+    """Parse 'sg_id:report_type:path' triples into a lookup keyed by (sg_id, report_type)."""
     mapping: dict[tuple[str, str], str] = {}
-    with open(json_map_path) as f:
-        for line in f:
-            if not line.strip():
-                continue
-            parts = line.strip().split('\t')
-            min_tsv_columns = 3
-            if len(parts) >= min_tsv_columns:
-                mapping[(parts[0], parts[1])] = parts[2]
+    for entry in entries:
+        sg_id, report_type, json_path = entry.split(':', 2)
+        mapping[(sg_id, report_type)] = json_path
     return mapping
 
 
@@ -116,10 +111,10 @@ def build_entries_from_reports(report_items: list[dict]) -> list[IndexEntry]:
     return entries
 
 
-def main(manifest: str, dataset_name: str, output: str, json_map_path: str | None = None) -> None:
+def main(manifest: str, dataset_name: str, output: str, json_entries: list[str] | None = None) -> None:
     report_items, loci_lists = load_manifest(manifest)
-    if json_map_path:
-        enrich_manifest_from_json(report_items, load_json_map(json_map_path))
+    if json_entries:
+        enrich_manifest_from_json(report_items, parse_json_entries(json_entries))
     entries = build_entries_from_reports(report_items)
 
     template_dir = Path(__file__).resolve().parent / 'templates'
@@ -139,9 +134,13 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='Generate an index page for LongTR pathogenic reports')
     parser.add_argument('--manifest', required=True, help='JSON manifest listing all reports')
     parser.add_argument(
-        '--json-map', dest='json_map', default=None, help='TSV mapping sg_id/report_type to JSON report paths'
+        '--json-entry',
+        dest='json_entries',
+        nargs='+',
+        default=None,
+        help='sg_id:report_type:path triples locating each per-SG JSON report',
     )
     parser.add_argument('--dataset', required=True, help='Dataset name')
     parser.add_argument('--output', required=True, help='Output HTML file path')
     args = parser.parse_args()
-    main(manifest=args.manifest, dataset_name=args.dataset, output=args.output, json_map_path=args.json_map)
+    main(manifest=args.manifest, dataset_name=args.dataset, output=args.output, json_entries=args.json_entries)

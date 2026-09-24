@@ -4,13 +4,14 @@ for a dataset, with sample metadata from metamist.
 """
 
 import datetime
-import json
 import re
 
 from hailtop.batch.job import Job
 
 from cpg_utils import Path, config, hail_batch
 from metamist.graphql import gql, query
+
+from lrs_annotation.utils import write_to_json
 
 METADATA_QUERY = gql(
     """
@@ -92,6 +93,7 @@ def longtr_index_page(
     sg_report_outputs: dict[str, dict[str, Path]],
     loci_lists: dict[str, list[str]],
     output_path: Path,
+    manifest_path: Path,
     job_attrs: dict[str, str],
 ) -> Job:
     """
@@ -114,10 +116,10 @@ def longtr_index_page(
 
     local_json_files: list[tuple[str, str, object]] = []
     for sg_id, output_dict in sg_report_outputs.items():
-        json_keys = [k for k in list(output_dict.keys()) if k.endswith('_json') or k == 'json']
+        json_keys = [k for k in output_dict if k.endswith('_json') or k == 'json']
         for json_key in json_keys:
             report_type = json_key.removesuffix('_json') if json_key != 'json' else 'default'
-            local_json = hail_batch.get_batch().read_input(str(output_dict.pop(json_key)))
+            local_json = batch_instance.read_input(str(output_dict.pop(json_key)))
             local_json_files.append((sg_id, report_type, local_json))
 
     today = datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
@@ -147,24 +149,21 @@ def longtr_index_page(
                 }
             )
 
-    manifest = {'reports': manifest_data, 'loci_lists': loci_lists}
-    json_map_lines = '\n'.join(f'{sg_id}\t{rt}\t{lj}' for sg_id, rt, lj in local_json_files)
+    write_to_json({'reports': manifest_data, 'loci_lists': loci_lists}, manifest_path)
+    local_manifest = batch_instance.read_input(str(manifest_path))
 
-    job.command(f"""
-    cat > {job.manifest} << 'MANIFEST_EOF'
-{json.dumps(manifest, indent=2)}
-MANIFEST_EOF
+    args = [
+        f'--manifest {local_manifest}',
+        f"--dataset '{dataset_title}'",
+        f'--output {job.output}',
+    ]
+    # Localised JSON paths only exist at command-render time, so they go on the command line
+    # rather than into a file we could write ahead of the job.
+    if local_json_files:
+        entries = ' '.join(f'{sg_id}:{rt}:{lj}' for sg_id, rt, lj in local_json_files)
+        args.append(f'--json-entry {entries}')
 
-    cat > {job.json_map} << MAP_EOF
-{json_map_lines}
-MAP_EOF
-
-    python3 {longtr_index.__file__} \\
-        --manifest {job.manifest} \\
-        --json-map {job.json_map} \\
-        --dataset '{dataset_title}' \\
-        --output {job.output}
-    """)
+    job.command(f'python3 {longtr_index.__file__} ' + ' '.join(args))
 
     batch_instance.write_output(job.output, str(output_path))
     return job

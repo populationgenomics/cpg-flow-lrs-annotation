@@ -119,6 +119,7 @@ class LongTRIndexPage(stage.DatasetStage):
             sg_report_outputs=sg_report_outputs,
             loci_lists=loci_lists,
             output_path=outputs['index'],
+            manifest_path=dataset.tmp_prefix() / 'longtr' / 'index_manifest.json',
             job_attrs=self.get_job_attrs(dataset),
         )
 
