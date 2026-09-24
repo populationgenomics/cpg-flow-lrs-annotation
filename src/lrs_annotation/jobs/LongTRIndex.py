@@ -20,11 +20,11 @@ METADATA_QUERY = gql(
             sequencingGroups(id: {in_: $sgIds}) {
                 id
                 sample {
-                    externalId
+                    externalIds
                     participant {
-                        externalId
+                        externalIds
                         families {
-                            externalId
+                            externalIds
                         }
                         familyParticipants {
                             affected
@@ -60,15 +60,17 @@ def get_sg_metadata(
     sg_metadata: dict[str, dict[str, str | int]] = {}
     for group in project.get('sequencingGroups', []):
         sg_id = group.get('id')
-        sample = group.get('sample', {})
-        participant = sample.get('participant', {})
-        families = participant.get('families', [])
-        family_participants = participant.get('familyParticipants', [])
+        # sample and participant are nullable in metamist, so `or {}` rather than a .get default
+        sample = group.get('sample') or {}
+        participant = sample.get('participant') or {}
+        families = participant.get('families') or []
+        family_participants = participant.get('familyParticipants') or []
 
+        # externalIds is a dict keyed by project, with '' holding the default ID
         sg_metadata[sg_id] = {
-            'family_id': families[0]['externalId'] if families else '',
-            'external_id': participant.get('externalId', ''),
-            'ext_sample': sample.get('externalId', ''),
+            'family_id': families[0].get('externalIds', {}).get('', '') if families else '',
+            'external_id': participant.get('externalIds', {}).get('', ''),
+            'ext_sample': sample.get('externalIds', {}).get('', ''),
             'affected': family_participants[0]['affected'] if family_participants else 0,
         }
 
