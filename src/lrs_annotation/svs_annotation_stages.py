@@ -85,11 +85,18 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
                 f'report for {sequencing_group.id} will include all disease loci',
             )
 
+        # cpg-flow populates this from metamist's reportedSex; males are hemizygous at chrX loci
+        sex = str(sequencing_group.pedigree.sex).lower()
+        if sex not in ('male', 'female'):
+            logger.warning(f'No reported sex for {sequencing_group.id}, chrX loci will be reported as diploid')
+            sex = 'unknown'
+
         job = longtr_pathogenic_report(
             vcf_path=vcf_path,
             outputs=outputs,
             job_attrs=self.get_job_attrs(sequencing_group),
             loci_lists=loci_lists or None,
+            sex=sex,
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)
