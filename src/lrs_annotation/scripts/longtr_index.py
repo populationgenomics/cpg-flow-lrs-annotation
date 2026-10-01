@@ -36,9 +36,12 @@ class IndexEntry:
 
 STATUS_COLORS = {
     'pathogenic': 'Red',
+    'carrier': 'Purple',
     'intermediate': 'Orange',
     'uncertain': 'Grey',
 }
+
+FLAGGED_STATUSES = tuple(STATUS_COLORS)
 
 
 def load_manifest(manifest_path: str) -> tuple[list[dict], dict[str, list[str]]]:
@@ -76,7 +79,7 @@ def enrich_manifest_from_json(
             missing = []
             for locus in report.get('loci', []):
                 status = locus.get('locus_status', 'normal')
-                if status in ('pathogenic', 'intermediate', 'uncertain'):
+                if status in FLAGGED_STATUSES:
                     flagged.append({'gene': locus['gene'], 'status': status})
                 if not locus.get('genotyped', True):
                     missing.append(locus['gene'])

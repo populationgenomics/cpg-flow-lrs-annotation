@@ -41,6 +41,17 @@ MIN_VCF_COLUMNS = 10
 
 MATCH_TOLERANCE = 20
 
+# Worst-first ordering, used both to reduce two alleles to a locus call and to sort the report.
+# 'carrier' outranks 'intermediate' because the allele is confirmed in the pathogenic range.
+STATUS_PRIORITY = {
+    'pathogenic': 0,
+    'carrier': 1,
+    'intermediate': 2,
+    'uncertain': 3,
+    'normal': 4,
+    'not_genotyped': 5,
+}
+
 INHERITANCE_NAMES = {
     'AD': 'Autosomal dominant',
     'AR': 'Autosomal recessive',
@@ -254,8 +265,7 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:  # noqa: PLR0
 
 def classify_locus(status1: str, status2: str) -> str:
     """Return the more severe of two allele classifications."""
-    priority = {'pathogenic': 0, 'intermediate': 1, 'uncertain': 2, 'normal': 3}
-    return status1 if priority.get(status1, 99) <= priority.get(status2, 99) else status2
+    return status1 if STATUS_PRIORITY.get(status1, 99) <= STATUS_PRIORITY.get(status2, 99) else status2
 
 
 def _parse_gt_indices(gt_str: str) -> list[int]:
@@ -376,7 +386,7 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
-def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dict], str]:
+def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unknown') -> tuple[list[dict], str]:
     """Scan a VCF against the locus index, returning sorted results and sample name."""
     results = {}
     sample_name = ''
@@ -412,16 +422,14 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dic
                 meta = strchive.get(locus_id)
                 if meta is None:
                     continue
-                results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info)
+                results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex)
 
     _add_missing_loci(results, locus_index, strchive)
 
     sorted_results = sorted(
         results.values(),
         key=lambda r: (
-            {'pathogenic': 0, 'intermediate': 1, 'uncertain': 2, 'normal': 3, 'not_genotyped': 4}.get(
-                r['locus_status'], 5
-            ),
+            STATUS_PRIORITY.get(r['locus_status'], 99),
             r['chrom'],
             r['start'],
         ),
@@ -430,7 +438,7 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict) -> tuple[list[dic
     return sorted_results, sample_name
 
 
-def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
+def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex: str = 'unknown') -> dict:
     """Extract genotype data and classify alleles for a single VCF record."""
     sample_data = parse_format_sample(cols[8], cols[9])
     period_raw = info.get('PERIOD', str(meta.get('motif_len', 3)))
@@ -453,20 +461,46 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info) -> dict:
         ref_seq,
         base['primary_motif'],
     )
+    seq1 = _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq)
+    seq2 = _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq)
+
+    # Males carry one X, and every chrX disease locus in STRchive sits outside the
+    # pseudoautosomal regions. LongTR calls chrX diploid regardless of sex, so collapse to a
+    # single allele: all chrX loci are expansion disorders, making the larger count the
+    # conservative choice (never under-call an expansion).
+    hemizygous = sex == 'male' and match['chrom'] == 'chrX'
+    if hemizygous:
+        if a2 > a1:
+            a1, seq1 = a2, seq2
+        a2, seq2 = None, None
 
     s1 = classify_allele(a1, meta)
-    s2 = classify_allele(a2, meta)
+    s2 = None if hemizygous else classify_allele(a2, meta)
+
+    locus_status = s1 if hemizygous else classify_locus(s1, s2)
+
+    # A female heterozygous for a pathogenic allele at an X-linked *recessive* locus is a
+    # carrier, not affected - her other X compensates. X-linked dominant loci (FMR1) still
+    # manifest, so they keep the pathogenic call.
+    if (
+        sex == 'female'
+        and match['chrom'] == 'chrX'
+        and 'XR' in meta.get('inheritance', [])
+        and [s1, s2].count('pathogenic') == 1
+    ):
+        locus_status = 'carrier'
 
     base.update(
         {
             'locus_id': match['locus_id'],
             'allele1_ru': a1,
             'allele2_ru': a2,
-            'allele1_seq': _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq),
-            'allele2_seq': _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq),
+            'allele1_seq': seq1,
+            'allele2_seq': seq2,
             'allele1_status': s1,
             'allele2_status': s2,
-            'locus_status': classify_locus(s1, s2),
+            'hemizygous': hemizygous,
+            'locus_status': locus_status,
             'dp': sample_data.get('DP', '.'),
             'q': sample_data.get('Q', '.'),
             'pq': sample_data.get('PQ', '.'),
@@ -497,6 +531,7 @@ def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
                 'allele2_seq': None,
                 'allele1_status': 'not_genotyped',
                 'allele2_status': 'not_genotyped',
+                'hemizygous': False,
                 'locus_status': 'not_genotyped',
                 'dp': '.',
                 'q': '.',
@@ -598,6 +633,7 @@ def status_badge(status: str) -> str:
     """Return an HTML badge span for a classification status."""
     colors = {
         'pathogenic': ('#dc3545', '#fff'),
+        'carrier': ('#6f42c1', '#fff'),
         'intermediate': ('#ffc107', '#333'),
         'uncertain': ('#fd7e14', '#fff'),
         'normal': ('#28a745', '#fff'),
@@ -649,6 +685,7 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
         results=results,
         n_genotyped=summary.get('genotyped', 0),
         n_pathogenic=summary.get('pathogenic', 0),
+        n_carrier=summary.get('carrier', 0),
         n_intermediate=summary.get('intermediate', 0),
         n_uncertain=summary.get('uncertain', 0),
         n_normal=summary.get('normal', 0),
@@ -688,13 +725,16 @@ def build_json_output(
         'allele2_seq',
         'allele1_status',
         'allele2_status',
+        'hemizygous',
         'locus_status',
+        'benign_min',
         'benign_max',
         'intermediate_min',
         'intermediate_max',
         'pathogenic_min',
         'pathogenic_max',
         'ref_copies',
+        'thresholds',
         'gt',
         'dp',
         'q',
@@ -721,12 +761,13 @@ def generate_report(
     output_json: str,
     report_type: str = 'default',
     loci_list: set[str] | None = None,
+    sex: str = 'unknown',
 ):
     """Load references, scan VCF, optionally filter by loci list, and write outputs."""
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
     locus_index = build_locus_index(bed_entries)
-    results, sample_name = scan_vcf(vcf_path, locus_index, strchive)
+    results, sample_name = scan_vcf(vcf_path, locus_index, strchive, sex)
 
     if loci_list:
         results = [r for r in results if r['locus_id'] in loci_list]
@@ -746,10 +787,13 @@ def generate_report(
 
     logger.info(f'Screened {len(results)} disease loci ({summary["genotyped"]} genotyped)')
     for r in results:
-        if r['locus_status'] in ('pathogenic', 'intermediate', 'uncertain'):
-            a1_str = _fmt_ru(r['allele1_ru'])
-            a2_str = _fmt_ru(r['allele2_ru'])
-            logger.warning(f'{r["gene"]} ({r["disease"]}): {r["locus_status"]} — {a1_str}/{a2_str} repeats')
+        if r['locus_status'] in ('pathogenic', 'carrier', 'intermediate', 'uncertain'):
+            counts = _fmt_ru(r['allele1_ru'])
+            if r['allele2_ru'] is not None:
+                counts += f'/{_fmt_ru(r["allele2_ru"])}'
+            elif r.get('hemizygous'):
+                counts += ' (hemizygous)'
+            logger.warning(f'{r["gene"]} ({r["disease"]}): {r["locus_status"]} — {counts} repeats')
     logger.info(f'HTML report: {output_html}')
     logger.info(f'JSON results: {output_json}')
 
@@ -766,6 +810,12 @@ def cli_main():
     parser.add_argument('--output_json', default='longtr_pathogenic.json', help='Output JSON file')
     parser.add_argument('--report_type', default='default', help='Report type label (e.g., default, paediatric)')
     parser.add_argument('--loci_list', help='Locus IDs to include', nargs='+')
+    parser.add_argument(
+        '--sex',
+        default='unknown',
+        choices=['male', 'female', 'unknown'],
+        help='Reported sex; males are treated as hemizygous at chrX loci',
+    )
     args = parser.parse_args()
 
     loci_set = set(args.loci_list) if args.loci_list else None
@@ -778,6 +828,7 @@ def cli_main():
         args.output_json,
         args.report_type,
         loci_set,
+        args.sex,
     )
 
 
