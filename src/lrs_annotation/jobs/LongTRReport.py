@@ -15,8 +15,8 @@ def longtr_pathogenic_report(
     outputs: dict[str, Path],
     job_attrs: dict[str, str],
     loci_lists: dict[str, list[str]],
+    sample_id: str,
     sex: str = 'unknown',
-    sample_id: str = '',
 ) -> Job:
     """
     Run the LongTR pathogenic screening script on a VCF file, one HTML+JSON per loci list.
@@ -44,7 +44,7 @@ def longtr_pathogenic_report(
         --output_json {json_rg} \\
         --report_type {list_name} \\
         --sex {sex} \\
-        --sample_id {sample_id} \\
+        --sample_id '{sample_id}' \\
         --loci_list {loci_str}
     """)
         batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
