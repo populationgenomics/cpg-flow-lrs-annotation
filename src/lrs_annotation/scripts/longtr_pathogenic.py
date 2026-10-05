@@ -23,8 +23,6 @@ References:
   Both from STRchive (github.com/dashnowlab/STRchive), with custom entries.
 """
 
-import gzip
-import itertools
 import json
 import math
 import re
@@ -33,11 +31,11 @@ from collections import defaultdict
 from pathlib import Path
 
 import jinja2
+from cyvcf2 import VCF
 from loguru import logger
 from markupsafe import Markup
 
 MIN_BED_COLUMNS = 5
-MIN_VCF_COLUMNS = 10
 
 MATCH_TOLERANCE = 20
 
@@ -70,13 +68,6 @@ EXTERNAL_LINK_DEFS = [
 ]
 
 
-def open_vcf(path: str):
-    """Open a VCF file, handling gzip-compressed inputs."""
-    if path.endswith('.gz'):
-        return gzip.open(path, 'rt')
-    return open(path)
-
-
 def load_strchive_json(path: str) -> dict:
     """Load STRchive loci JSON and index entries by locus ID."""
     with open(path) as f:
@@ -107,40 +98,25 @@ def load_longtr_bed(path: str) -> list[dict]:
     return entries
 
 
-def build_locus_index(bed_entries: list[dict]) -> dict:
-    """Group BED entries by chromosome for positional lookup."""
-    index = defaultdict(list)
-    for entry in bed_entries:
-        index[entry['chrom']].append(entry)
-    return dict(index)
+def _matches_locus(entry: dict, vcf_start: int, vcf_end: int) -> bool:
+    """Check a variant's span against a BED entry within MATCH_TOLERANCE bp at both ends."""
+    return abs(vcf_start - entry['start']) <= MATCH_TOLERANCE and abs(vcf_end - entry['end']) <= MATCH_TOLERANCE
 
 
-def find_matching_loci(chrom: str, vcf_start: int, vcf_end: int, index: dict) -> list[dict]:
-    """Find all BED entries matching a VCF position within MATCH_TOLERANCE bp."""
-    matches = []
-    for entry in index.get(chrom, []):
-        if abs(vcf_start - entry['start']) <= MATCH_TOLERANCE and abs(vcf_end - entry['end']) <= MATCH_TOLERANCE:
-            matches.append(entry)
-    return matches
-
-
-def parse_info(info_str: str) -> dict[str, str]:
-    """Parse a VCF INFO field into a key-value dict."""
-    fields = {}
-    for item in info_str.split(';'):
-        if '=' in item:
-            k, v = item.split('=', 1)
-            fields[k] = v
-        else:
-            fields[item] = 'true'
-    return fields
-
-
-def parse_format_sample(fmt_str: str, sample_str: str) -> dict[str, str]:
-    """Zip FORMAT keys with sample values into a dict."""
-    keys = fmt_str.split(':')
-    values = sample_str.split(':')
-    return dict(zip(keys, values, strict=False))
+def _format_value(variant, key: str, default: str = '.') -> str:
+    """Read a single-sample FORMAT field as a display string, or default when absent."""
+    try:
+        values = variant.format(key)
+    except KeyError:
+        return default
+    if values is None or len(values) == 0:
+        return default
+    first = values[0]
+    # numeric fields come back as a per-sample array, strings as a flat array
+    value = first[0] if hasattr(first, '__len__') and not isinstance(first, str) else first
+    if isinstance(value, str):
+        return value or default
+    return f'{value:g}'
 
 
 IUPAC_MAP = {
@@ -212,7 +188,7 @@ def compute_allele_repeat_units(
 
     alleles: list[float] = []
     for allele_idx in gt_indices:
-        if 0 < allele_idx <= len(alt_alleles) and alt_alleles[allele_idx - 1] != '.':
+        if 0 < allele_idx <= len(alt_alleles):
             alleles.append(float(count_motif_in_sequence(alt_alleles[allele_idx - 1], motif)))
         else:
             alleles.append(float(ref_motif_count))
@@ -266,20 +242,6 @@ def classify_allele(repeat_units: float, locus_meta: dict) -> str:  # noqa: PLR0
 def classify_locus(status1: str, status2: str) -> str:
     """Return the more severe of two allele classifications."""
     return status1 if STATUS_PRIORITY.get(status1, 99) <= STATUS_PRIORITY.get(status2, 99) else status2
-
-
-def _parse_gt_indices(gt_str: str) -> list[int]:
-    """Parse a GT field string into integer allele indices."""
-    sep = '|' if '|' in gt_str else '/'
-    indices = []
-    for idx_str in gt_str.split(sep):
-        try:
-            indices.append(int(idx_str))
-        except ValueError:
-            indices.append(0)
-    if len(indices) == 1:
-        indices = [indices[0], indices[0]]
-    return indices
 
 
 def _resolve_allele_seq(gt_idx: int, alt_alleles: list[str], ref_seq: str) -> str:
@@ -386,39 +348,31 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
-def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unknown') -> list[dict]:
-    """Scan a VCF against the locus index, returning results sorted worst-first."""
+def scan_vcf(vcf_path: str, bed_entries: list[dict], strchive: dict, sex: str = 'unknown') -> list[dict]:
+    """Fetch each disease locus from an indexed VCF, returning results sorted worst-first."""
     results = {}
+    vcf = VCF(vcf_path)
 
-    with open_vcf(vcf_path) as f:
-        for raw_line in f:
-            text = raw_line.rstrip('\n')
+    for entry in bed_entries:
+        locus_id = entry['locus_id']
+        meta = strchive.get(locus_id)
+        if meta is None or locus_id in results:
+            continue
 
-            if text.startswith('#'):
+        # Pad the fetch by the tolerance, since LongTR's coordinates do not exactly match
+        # STRchive's; the same fuzzy comparison then filters whatever the index returns.
+        start = max(1, entry['start'] - MATCH_TOLERANCE)
+        region = f'{entry["chrom"]}:{start}-{entry["end"] + MATCH_TOLERANCE}'
+        for variant in vcf(region):
+            vcf_start = variant.INFO.get('START') or variant.POS
+            vcf_end = variant.INFO.get('END') or vcf_start
+            if not _matches_locus(entry, vcf_start, vcf_end):
                 continue
+            results[locus_id] = _process_vcf_record(variant, entry, meta, vcf_start, vcf_end, sex=sex)
+            break
 
-            cols = text.split('\t')
-            if len(cols) < MIN_VCF_COLUMNS:
-                continue
-
-            chrom = cols[0]
-            if chrom not in locus_index:
-                continue
-
-            info = parse_info(cols[7])
-            vcf_start = int(info.get('START', cols[1]))
-            vcf_end = int(info.get('END', vcf_start))
-
-            for match in find_matching_loci(chrom, vcf_start, vcf_end, locus_index):
-                locus_id = match['locus_id']
-                if locus_id in results:
-                    continue
-                meta = strchive.get(locus_id)
-                if meta is None:
-                    continue
-                results[locus_id] = _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex)
-
-    _add_missing_loci(results, locus_index, strchive)
+    vcf.close()
+    _add_missing_loci(results, bed_entries, strchive)
 
     return sorted(
         results.values(),
@@ -430,15 +384,18 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unkno
     )
 
 
-def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex: str = 'unknown') -> dict:
+def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 'unknown') -> dict:
     """Extract genotype data and classify alleles for a single VCF record."""
-    sample_data = parse_format_sample(cols[8], cols[9])
-    period_raw = info.get('PERIOD', str(meta.get('motif_len', 3)))
-    period = int(period_raw.split(',')[0])
-    alt_alleles = cols[4].split(',') if cols[4] != '.' else []
+    period = variant.INFO.get('PERIOD') or meta.get('motif_len', 3)
+    alt_alleles = list(variant.ALT)
 
-    # Parse GT once, reuse for repeat counting and allele sequences
-    gt_indices = _parse_gt_indices(sample_data.get('GT', '0/0'))
+    # cyvcf2 gives [allele1, ..., alleleN, phased] - the phase flag is always last, so slice it
+    # off rather than taking a fixed two. A haploid call yields one index, duplicated below so
+    # downstream code can keep assuming a pair; -1 marks a missing call, which counts as ref.
+    gt = variant.genotypes[0] if variant.genotypes else [0, 0, False]
+    gt_indices = [max(0, i) for i in gt[:-1]]
+    if len(gt_indices) == 1:
+        gt_indices *= 2
 
     # Shared locus metadata from STRchive + BED, with VCF-specific overrides
     base = _build_locus_meta(meta, match)
@@ -446,7 +403,7 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex: str = 
     base['end'] = vcf_end
     base['period'] = period
 
-    ref_seq = cols[3]
+    ref_seq = variant.REF
     a1, a2 = compute_allele_repeat_units(
         gt_indices,
         alt_alleles,
@@ -493,22 +450,22 @@ def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex: str = 
             'allele2_status': s2,
             'hemizygous': hemizygous,
             'locus_status': locus_status,
-            'dp': sample_data.get('DP', '.'),
-            'q': sample_data.get('Q', '.'),
-            'pq': sample_data.get('PQ', '.'),
-            'gldiff': sample_data.get('GLDIFF', '.'),
-            'gt': sample_data.get('GT', '.'),
-            'filter': cols[6],
-            'read_alleles': _parse_allreads(sample_data.get('ALLREADS', ''), vcf_start, vcf_end, period),
+            'dp': _format_value(variant, 'DP'),
+            'q': _format_value(variant, 'Q'),
+            'pq': _format_value(variant, 'PQ'),
+            'gldiff': _format_value(variant, 'GLDIFF'),
+            'gt': ('|' if gt[-1] else '/').join('.' if i < 0 else str(i) for i in gt[:-1]),
+            'filter': variant.FILTER or 'PASS',
+            'read_alleles': _parse_allreads(_format_value(variant, 'ALLREADS', ''), vcf_start, vcf_end, period),
             'genotyped': True,
         }
     )
     return base
 
 
-def _add_missing_loci(results: dict, locus_index: dict, strchive: dict) -> None:
+def _add_missing_loci(results: dict, bed_entries: list[dict], strchive: dict) -> None:
     """Add not-genotyped placeholder entries for loci absent from the VCF."""
-    for entry in itertools.chain.from_iterable(locus_index.values()):
+    for entry in bed_entries:
         lid = entry['locus_id']
         if lid in results:
             continue
@@ -751,16 +708,16 @@ def generate_report(
     longtr_bed: str,
     output_html: str,
     output_json: str,
+    *,
     report_type: str,
+    sample_id: str,
     loci_list: set[str] | None = None,
     sex: str = 'unknown',
-    sample_id: str = '',
 ):
     """Load references, scan VCF, optionally filter by loci list, and write outputs."""
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
-    locus_index = build_locus_index(bed_entries)
-    results = scan_vcf(vcf_path, locus_index, strchive, sex)
+    results = scan_vcf(vcf_path, bed_entries, strchive, sex)
 
     if loci_list:
         results = [r for r in results if r['locus_id'] in loci_list]
@@ -820,10 +777,10 @@ def cli_main():
         args.longtr_bed,
         args.output_html,
         args.output_json,
-        args.report_type,
-        loci_set,
-        args.sex,
-        args.sample_id,
+        report_type=args.report_type,
+        sample_id=args.sample_id,
+        loci_list=loci_set,
+        sex=args.sex,
     )
 
 

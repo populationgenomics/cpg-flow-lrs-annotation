@@ -27,7 +27,11 @@ def longtr_pathogenic_report(
     job.image(config.config_retrieve(['workflow', 'driver_image']))
     job.storage('10GB')
 
-    local_vcf = batch_instance.read_input(vcf_path)
+    # the script fetches each locus by region, so the tabix index has to be localised next to
+    # the VCF - the group keys carry the extensions so htslib finds it at <vcf>.tbi
+    local_vcf = batch_instance.read_input_group(
+        **{'vcf.gz': vcf_path, 'vcf.gz.tbi': f'{vcf_path}.tbi'},
+    )['vcf.gz']
     strchive_json = batch_instance.read_input(config.config_retrieve(['references', 'strchive_json']))
     longtr_bed = batch_instance.read_input(config.config_retrieve(['references', 'strchive_longtr_bed']))
 
