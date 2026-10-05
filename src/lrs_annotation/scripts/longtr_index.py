@@ -45,11 +45,9 @@ FLAGGED_STATUSES = tuple(STATUS_COLORS)
 
 
 def load_manifest(manifest_path: str) -> tuple[list[dict], dict[str, list[str]]]:
+    """Read the manifest written by the index job into its reports and loci lists."""
     with open(manifest_path) as f:
         raw = json.load(f)
-
-    if isinstance(raw, list):
-        return raw, {}
     return raw.get('reports', []), raw.get('loci_lists', {})
 
 
