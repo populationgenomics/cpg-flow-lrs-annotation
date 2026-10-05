@@ -373,8 +373,10 @@ def test_summarise_results_handles_no_results():
 
 
 # scan_vcf fetches by region, which htslib can only do against a bgzipped+indexed file
+BGZIP = shutil.which('bgzip')
+TABIX = shutil.which('tabix')
 needs_htslib = pytest.mark.skipif(
-    shutil.which('bgzip') is None or shutil.which('tabix') is None,
+    BGZIP is None or TABIX is None,
     reason='bgzip/tabix needed to build an indexed VCF for region queries',
 )
 
@@ -382,7 +384,8 @@ needs_htslib = pytest.mark.skipif(
 @pytest.fixture
 def indexed_vcf(tmp_path):
     """Write a two-record VCF covering one autosomal and one chrX locus, bgzipped and indexed."""
-    bgzip, tabix = shutil.which('bgzip'), shutil.which('tabix')
+    bgzip, tabix = BGZIP, TABIX
+    assert bgzip and tabix
     plain = tmp_path / 'mini.vcf'
     plain.write_text(
         _vcf_text(
@@ -409,7 +412,9 @@ def bed_entries():
 
 def _write_indexed(tmp_path, rows: list[str]) -> str:
     """bgzip + tabix a VCF built from the given rows, returning the .gz path."""
-    bgzip, tabix = shutil.which('bgzip'), shutil.which('tabix')
+    # needs_htslib guards every caller, so these are present
+    bgzip, tabix = BGZIP, TABIX
+    assert bgzip and tabix
     plain = tmp_path / 'offset.vcf'
     plain.write_text(_vcf_text(rows))
     subprocess.run([bgzip, '-f', str(plain)], check=True)  # noqa: S603

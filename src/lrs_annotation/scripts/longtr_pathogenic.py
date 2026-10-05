@@ -404,29 +404,32 @@ def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 
     base['period'] = period
 
     ref_seq = variant.REF
-    a1, a2 = compute_allele_repeat_units(
+    first, second = compute_allele_repeat_units(
         gt_indices,
         alt_alleles,
         ref_seq,
         base['primary_motif'],
     )
-    seq1 = _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq)
-    seq2 = _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq)
+    seq_first = _resolve_allele_seq(gt_indices[0], alt_alleles, ref_seq)
+    seq_second = _resolve_allele_seq(gt_indices[1], alt_alleles, ref_seq)
 
     # Males carry one X, and every chrX disease locus in STRchive sits outside the
     # pseudoautosomal regions. LongTR calls chrX diploid regardless of sex, so collapse to a
     # single allele: all chrX loci are expansion disorders, making the larger count the
     # conservative choice (never under-call an expansion).
     hemizygous = sex == 'male' and match['chrom'] == 'chrX'
-    if hemizygous:
-        if a2 > a1:
-            a1, seq1 = a2, seq2
-        a2, seq2 = None, None
+    if hemizygous and second > first:
+        first, seq_first = second, seq_second
+
+    a1 = first
+    seq1 = seq_first
+    a2: float | None = None if hemizygous else second
+    seq2: str | None = None if hemizygous else seq_second
 
     s1 = classify_allele(a1, meta)
-    s2 = None if hemizygous else classify_allele(a2, meta)
+    s2: str | None = None if a2 is None else classify_allele(a2, meta)
 
-    locus_status = s1 if hemizygous else classify_locus(s1, s2)
+    locus_status = s1 if s2 is None else classify_locus(s1, s2)
 
     # A female heterozygous for a pathogenic allele at an X-linked *recessive* locus is a
     # carrier, not affected - her other X compensates. X-linked dominant loci (FMR1) still
@@ -624,9 +627,7 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
     # A locus can carry several modes (e.g. 'AD, AR'), so count membership rather than the whole string
     modes_per_result = [[m.strip() for m in r.get('inheritance', '').split(',') if m.strip()] for r in results]
     inheritance_levels = sorted({m for modes in modes_per_result for m in modes})
-    inheritance_counts = {
-        mode: sum(1 for modes in modes_per_result if mode in modes) for mode in inheritance_levels
-    }
+    inheritance_counts = {mode: sum(1 for modes in modes_per_result if mode in modes) for mode in inheritance_levels}
 
     return template.render(
         sample_name=sample_name,
