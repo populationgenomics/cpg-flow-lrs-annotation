@@ -40,16 +40,23 @@ def get_longtr_loci_lists(dataset: str) -> dict[str, list[str]]:
     Reads from the production config at ['longtr', 'loci_lists'] and ['longtr', 'loci_lists_datasets'].
     Returns a mapping of list name to list of locus IDs.
     Falls back to the 'default' list when a dataset has no explicit mapping.
+
+    Raises if the config is absent - a silently unsubsetted report looks like a successful run
+    while screening every locus instead of the ones the dataset is meant to report on.
     """
     raw = config_retrieve(['longtr', 'loci_lists'], default=None)
     if not raw:
-        return {}
+        raise ValueError(
+            'No [longtr.loci_lists] in the config. Submit the longtr loci_lists config from production pipelines repo',
+        )
 
     loci_lists = {k: v for k, v in raw.items() if isinstance(v, list)}
 
     loci_list_datasets = config_retrieve(['longtr', 'loci_lists_datasets'], default=None)
     if not loci_list_datasets:
-        return loci_lists
+        raise ValueError(
+            'No [longtr.loci_lists_datasets] in the config, so no dataset-to-loci-list mapping is available.',
+        )
 
     prod_dataset = dataset.removesuffix('-test')
     in_scope = [ll_name for ll_name, datasets in loci_list_datasets.items() if prod_dataset in datasets]
