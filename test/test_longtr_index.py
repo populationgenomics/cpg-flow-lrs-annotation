@@ -34,7 +34,6 @@ def report_json(tmp_path):
                 'summary': {},
                 'loci': [
                     {'gene': 'TCF4', 'locus_status': 'pathogenic', 'genotyped': True},
-                    {'gene': 'AR', 'locus_status': 'carrier', 'genotyped': True},
                     {'gene': 'RFC1', 'locus_status': 'intermediate', 'genotyped': True},
                     {'gene': 'POLG', 'locus_status': 'uncertain', 'genotyped': True},
                     {'gene': 'HTT', 'locus_status': 'normal', 'genotyped': True},
@@ -46,15 +45,14 @@ def report_json(tmp_path):
     return str(path)
 
 
-def test_enrich_manifest_keeps_carrier_findings(report_json):
-    """Carrier loci must reach the index; they were previously dropped by a hardcoded filter."""
+def test_enrich_manifest_extracts_flagged_and_missing(report_json):
+    """Every flagged status reaches the index; the filter is derived from STATUS_COLORS."""
     items = [{'sample': 'CPG1', 'report_type': 'neuro'}]
     enrich_manifest_from_json(items, {('CPG1', 'neuro'): report_json})
 
     flagged = {f['gene']: f['status'] for f in items[0]['flagged_loci']}
     assert flagged == {
         'TCF4': 'pathogenic',
-        'AR': 'carrier',
         'RFC1': 'intermediate',
         'POLG': 'uncertain',
     }
@@ -71,7 +69,6 @@ def test_build_entries_groups_loci_by_colour(report_json):
 
     assert entry.loci_of_interest == {
         'Red': ['TCF4'],
-        'Purple': ['AR'],
         'Orange': ['RFC1'],
         'Grey': ['POLG'],
     }

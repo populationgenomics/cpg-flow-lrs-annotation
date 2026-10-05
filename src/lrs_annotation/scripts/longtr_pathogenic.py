@@ -40,14 +40,12 @@ MIN_BED_COLUMNS = 5
 MATCH_TOLERANCE = 20
 
 # Worst-first ordering, used both to reduce two alleles to a locus call and to sort the report.
-# 'carrier' outranks 'intermediate' because the allele is confirmed in the pathogenic range.
 STATUS_PRIORITY = {
     'pathogenic': 0,
-    'carrier': 1,
-    'intermediate': 2,
-    'uncertain': 3,
-    'normal': 4,
-    'not_genotyped': 5,
+    'intermediate': 1,
+    'uncertain': 2,
+    'normal': 3,
+    'not_genotyped': 4,
 }
 
 INHERITANCE_NAMES = {
@@ -431,16 +429,17 @@ def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 
 
     locus_status = s1 if s2 is None else classify_locus(s1, s2)
 
-    # A female heterozygous for a pathogenic allele at an X-linked *recessive* locus is a
-    # carrier, not affected - her other X compensates. X-linked dominant loci (FMR1) still
-    # manifest, so they keep the pathogenic call.
+    # A female heterozygous for a pathogenic allele at an X-linked *recessive* locus is not
+    # straightforwardly affected - her second X compensates - so the call is downgraded to
+    # uncertain rather than asserting disease. Males are hemizygous and keep the pathogenic
+    # call; X-linked dominant loci (FMR1) manifest in females and are left alone.
     if (
         sex == 'female'
         and match['chrom'] == 'chrX'
         and 'XR' in meta.get('inheritance', [])
         and [s1, s2].count('pathogenic') == 1
     ):
-        locus_status = 'carrier'
+        locus_status = 'uncertain'
 
     base.update(
         {
@@ -585,7 +584,6 @@ def status_badge(status: str) -> str:
     """Return an HTML badge span for a classification status."""
     colors = {
         'pathogenic': ('#dc3545', '#fff'),
-        'carrier': ('#6f42c1', '#fff'),
         'intermediate': ('#ffc107', '#333'),
         'uncertain': ('#fd7e14', '#fff'),
         'normal': ('#28a745', '#fff'),
@@ -635,7 +633,6 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
         results=results,
         n_genotyped=summary.get('genotyped', 0),
         n_pathogenic=summary.get('pathogenic', 0),
-        n_carrier=summary.get('carrier', 0),
         n_intermediate=summary.get('intermediate', 0),
         n_uncertain=summary.get('uncertain', 0),
         n_normal=summary.get('normal', 0),
@@ -738,7 +735,7 @@ def generate_report(
 
     logger.info(f'Screened {len(results)} disease loci ({summary["genotyped"]} genotyped)')
     for r in results:
-        if r['locus_status'] in ('pathogenic', 'carrier', 'intermediate', 'uncertain'):
+        if r['locus_status'] in ('pathogenic', 'intermediate', 'uncertain'):
             counts = _fmt_ru(r['allele1_ru'])
             if r['allele2_ru'] is not None:
                 counts += f'/{_fmt_ru(r["allele2_ru"])}'

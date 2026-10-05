@@ -268,21 +268,21 @@ def test_hemizygous_not_applied_to_autosomes(tmp_path):
 @pytest.mark.parametrize(
     ('sex', 'expected_status'),
     [
-        ('female', 'carrier'),  # one pathogenic allele on an X-linked recessive locus
+        ('female', 'uncertain'),  # one pathogenic allele on an X-linked recessive locus
         ('male', 'pathogenic'),  # hemizygous, so the expansion is expressed
         ('unknown', 'pathogenic'),  # never downgrade without knowing sex
     ],
 )
 def test_xlinked_recessive_single_pathogenic_allele(tmp_path, sex, expected_status):
-    """A female heterozygote at an XR locus is a carrier; males and unknown sex are not."""
+    """A female heterozygote at an XR locus is downgraded to uncertain; males and unknown sex are not."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=AR_REF_COUNT, n_alt=AR_ALT_COUNT, gt='0|1')
     match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex=sex)
     assert result['locus_status'] == expected_status
 
 
-def test_female_homozygous_xr_is_affected_not_carrier(tmp_path):
-    """Two pathogenic alleles at an XR locus means affected, so carrier must not apply."""
+def test_female_homozygous_xr_stays_pathogenic(tmp_path):
+    """Two pathogenic alleles at an XR locus means affected, so the downgrade must not apply."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=AR_REF_COUNT, n_alt=AR_ALT_COUNT, gt='1|1')
     match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex='female')
@@ -292,7 +292,7 @@ def test_female_homozygous_xr_is_affected_not_carrier(tmp_path):
 
 
 def test_female_xlinked_dominant_stays_pathogenic(tmp_path):
-    """X-linked dominant loci manifest in females, so carrier must not apply to FMR1."""
+    """X-linked dominant loci manifest in females, so the downgrade must not apply to FMR1."""
     variant = _variant(tmp_path, 'chrX', 147912049, 'CGG', n_ref=30, n_alt=250, gt='0|1')
     match = _bed_match('chrX', 147912049, 'CGG', 'FXS_FMR1')
     result = _process_vcf_record(variant, match, FMR1, 147912049, 147912099, sex='female')
@@ -352,17 +352,15 @@ def test_summarise_results_counts_by_status():
     """Totals drive the summary tiles and filter button counts."""
     rows = [
         {'genotyped': True, 'locus_status': 'pathogenic'},
-        {'genotyped': True, 'locus_status': 'carrier'},
         {'genotyped': True, 'locus_status': 'normal'},
         {'genotyped': True, 'locus_status': 'normal'},
         {'genotyped': False, 'locus_status': 'not_genotyped'},
     ]
     assert _summarise_results(rows) == {
-        'total_loci': 5,
-        'genotyped': 4,
+        'total_loci': 4,
+        'genotyped': 3,
         'not_genotyped': 1,
         'pathogenic': 1,
-        'carrier': 1,
         'normal': 2,
     }
 
@@ -474,10 +472,10 @@ def test_scan_vcf_end_to_end(indexed_vcf, bed_entries):
 
     assert by_id['HD_HTT']['locus_status'] == 'pathogenic'
     assert (by_id['HD_HTT']['allele1_ru'], by_id['HD_HTT']['allele2_ru']) == (HTT_REF_COUNT, HTT_ALT_COUNT)
-    # female + XR + one pathogenic allele
-    assert by_id['SBMA_AR']['locus_status'] == 'carrier'
+    # female + XR + one pathogenic allele is downgraded from pathogenic
+    assert by_id['SBMA_AR']['locus_status'] == 'uncertain'
 
-    # pathogenic sorts ahead of carrier
+    # pathogenic sorts ahead of uncertain
     assert [r['locus_id'] for r in results] == ['HD_HTT', 'SBMA_AR']
 
 

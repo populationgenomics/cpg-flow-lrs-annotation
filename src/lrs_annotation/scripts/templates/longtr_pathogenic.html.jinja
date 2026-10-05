@@ -31,7 +31,6 @@
   .card-intermediate { border-left-color: #ffc107; }
   .card-uncertain { border-left-color: #fd7e14; }
   .card-pathogenic { border-left-color: #dc3545; }
-  .card-carrier { border-left-color: #6f42c1; }
   .card-not-genotyped { border-left-color: #6c757d; opacity: 0.7; }
 
   .card-header { margin-bottom: 8px; }
@@ -160,10 +159,11 @@
         <dd>All chrX loci in this catalogue lie outside the pseudoautosomal regions, so males carry one copy.
             LongTR calls chrX as diploid by default, so for male samples the larger of the two reported counts
             is kept and shown as a single hemizygous allele.</dd>
-        <dt>Carrier</dt>
-        <dd>A female heterozygous for a pathogenic allele at an X-linked <em>recessive</em> locus is reported as a
-            carrier rather than affected, as her second X compensates. X-linked dominant loci still report as
-            pathogenic. Carrier status is a reproductive-risk finding, not a diagnosis.</dd>
+        <dt>Females at X-linked recessive loci</dt>
+        <dd>A female heterozygous for a pathogenic allele at an X-linked <em>recessive</em> locus is reported as
+            <strong>uncertain</strong> rather than pathogenic, since her second X may compensate. Males are
+            hemizygous and report as pathogenic; X-linked dominant loci such as <em>FMR1</em> manifest in females
+            and are unaffected by this rule.</dd>
       </dl>
       <p style="font-size:0.75rem; color:var(--muted); margin-top:6px;">
         Both depend on reported sex from metamist; where sex is unknown, chrX loci are reported as diploid.
@@ -206,7 +206,6 @@
 
 <div class="summary-grid">
   <div class="summary-card highlight-red"><div class="value">{{ n_pathogenic }}</div><div class="label">Pathogenic</div></div>
-  {% if n_carrier %}<div class="summary-card"><div class="value" style="color:#6f42c1">{{ n_carrier }}</div><div class="label">Carrier</div></div>{% endif %}
   <div class="summary-card highlight-yellow"><div class="value">{{ n_intermediate }}</div><div class="label">Intermediate</div></div>
   <div class="summary-card"><div class="value">{{ n_uncertain }}</div><div class="label">Uncertain</div></div>
   <div class="summary-card"><div class="value">{{ n_normal }}</div><div class="label">Normal</div></div>
@@ -218,7 +217,6 @@
   <div class="legend-item"><div class="legend-swatch" style="background:#28a745;"></div> Normal</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#ffc107;"></div> Intermediate</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#dc3545;"></div> Pathogenic</div>
-  {% if n_carrier %}<div class="legend-item"><div class="legend-swatch" style="background:#6f42c1;"></div> Carrier</div>{% endif %}
   <div class="legend-item"><svg width="16" height="12"><line x1="8" y1="0" x2="8" y2="12" stroke="#0d6efd" stroke-width="2.5"/><circle cx="8" cy="2" r="3" fill="#0d6efd"/></svg> Allele 1</div>
   <div class="legend-item"><svg width="16" height="12"><line x1="8" y1="0" x2="8" y2="12" stroke="#6610f2" stroke-width="2.5"/><circle cx="8" cy="2" r="3" fill="#6610f2"/></svg> Allele 2</div>
   <div class="legend-item"><svg width="16" height="12"><circle cx="8" cy="6" r="3" fill="rgba(100,100,100,0.2)"/></svg> Per-read alleles</div>
@@ -228,7 +226,6 @@
   <span class="filter-label">Status:</span>
   <button class="filter-btn status-filter active" onclick="filterStatus('all')">All ({{ results | length }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('pathogenic')">Pathogenic ({{ n_pathogenic }})</button>
-  {% if n_carrier %}<button class="filter-btn status-filter" onclick="filterStatus('carrier')">Carrier ({{ n_carrier }})</button>{% endif %}
   <button class="filter-btn status-filter" onclick="filterStatus('intermediate')">Intermediate ({{ n_intermediate }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('uncertain')">Uncertain ({{ n_uncertain }})</button>
   <button class="filter-btn status-filter" onclick="filterStatus('normal')">Normal ({{ n_normal }})</button>

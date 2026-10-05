@@ -36,7 +36,6 @@ class IndexEntry:
 
 STATUS_COLORS = {
     'pathogenic': 'Red',
-    'carrier': 'Purple',
     'intermediate': 'Orange',
     'uncertain': 'Grey',
 }
