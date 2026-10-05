@@ -68,7 +68,7 @@ def enrich_manifest_from_json(
 ) -> None:
     """Read JSON report files and add flagged_loci/missing_loci to manifest entries in-place."""
     for item in report_items:
-        key = (item['sample'], item.get('report_type', 'default'))
+        key = (item['sample'], item['report_type'])
         json_path = json_map.get(key)
         if not json_path:
             continue
@@ -104,7 +104,7 @@ def build_entries_from_reports(report_items: list[dict]) -> list[IndexEntry]:
                 ext_participant=item.get('external_id', item.get('ext_participant', '')),
                 ext_sample=item.get('ext_sample', ''),
                 affected_status=item.get('affected_status', ''),
-                report_type=re.sub(r'[-_]', ' ', item.get('report_type', 'default')).title(),
+                report_type=re.sub(r'[-_]', ' ', item['report_type']).title(),
                 run_date=item.get('date', ''),
                 missing_loci=', '.join(item.get('missing_loci', [])),
                 url=item.get('url', ''),

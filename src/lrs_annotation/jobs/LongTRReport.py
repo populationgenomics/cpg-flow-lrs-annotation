@@ -14,14 +14,12 @@ def longtr_pathogenic_report(
     vcf_path: str,
     outputs: dict[str, Path],
     job_attrs: dict[str, str],
-    loci_lists: dict[str, list[str]] | None = None,
+    loci_lists: dict[str, list[str]],
     sex: str = 'unknown',
+    sample_id: str = '',
 ) -> Job:
     """
-    Run the LongTR pathogenic screening script on a VCF file.
-
-    If loci_lists is provided, produces one HTML+JSON per report type.
-    Otherwise produces a single report with all loci.
+    Run the LongTR pathogenic screening script on a VCF file, one HTML+JSON per loci list.
     """
     batch_instance = hail_batch.get_batch()
 
@@ -33,24 +31,11 @@ def longtr_pathogenic_report(
     strchive_json = batch_instance.read_input(config.config_retrieve(['references', 'strchive_json']))
     longtr_bed = batch_instance.read_input(config.config_retrieve(['references', 'strchive_longtr_bed']))
 
-    if not loci_lists:
+    for list_name, loci in loci_lists.items():
+        html_rg = job[f'{list_name}_html']
+        json_rg = job[f'{list_name}_json']
+        loci_str = ' '.join(loci)
         job.command(f"""
-    python3 {longtr_pathogenic.__file__} \\
-        --vcf_path {local_vcf} \\
-        --strchive_json {strchive_json} \\
-        --longtr_bed {longtr_bed} \\
-        --output_html {job.html} \\
-        --output_json {job.json} \\
-        --sex {sex}
-    """)
-        batch_instance.write_output(job.html, str(outputs['html']))
-        batch_instance.write_output(job.json, str(outputs['json']))
-    else:
-        for list_name, loci in loci_lists.items():
-            html_rg = job[f'{list_name}_html']
-            json_rg = job[f'{list_name}_json']
-            loci_str = ' '.join(loci)
-            job.command(f"""
     python3 {longtr_pathogenic.__file__} \\
         --vcf_path {local_vcf} \\
         --strchive_json {strchive_json} \\
@@ -59,9 +44,10 @@ def longtr_pathogenic_report(
         --output_json {json_rg} \\
         --report_type {list_name} \\
         --sex {sex} \\
+        --sample_id {sample_id} \\
         --loci_list {loci_str}
     """)
-            batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
-            batch_instance.write_output(json_rg, str(outputs[f'{list_name}_json']))
+        batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
+        batch_instance.write_output(json_rg, str(outputs[f'{list_name}_json']))
 
     return job

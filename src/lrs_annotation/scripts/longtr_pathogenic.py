@@ -386,21 +386,15 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
-def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unknown') -> tuple[list[dict], str]:
-    """Scan a VCF against the locus index, returning sorted results and sample name."""
+def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unknown') -> list[dict]:
+    """Scan a VCF against the locus index, returning results sorted worst-first."""
     results = {}
-    sample_name = ''
 
     with open_vcf(vcf_path) as f:
         for raw_line in f:
             text = raw_line.rstrip('\n')
 
-            if text.startswith('##'):
-                continue
-            if text.startswith('#CHROM'):
-                cols = text.split('\t')
-                if len(cols) >= MIN_VCF_COLUMNS:
-                    sample_name = cols[9]
+            if text.startswith('#'):
                 continue
 
             cols = text.split('\t')
@@ -426,7 +420,7 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unkno
 
     _add_missing_loci(results, locus_index, strchive)
 
-    sorted_results = sorted(
+    return sorted(
         results.values(),
         key=lambda r: (
             STATUS_PRIORITY.get(r['locus_status'], 99),
@@ -434,8 +428,6 @@ def scan_vcf(vcf_path: str, locus_index: dict, strchive: dict, sex: str = 'unkno
             r['start'],
         ),
     )
-
-    return sorted_results, sample_name
 
 
 def _process_vcf_record(cols, match, meta, vcf_start, vcf_end, info, sex: str = 'unknown') -> dict:
@@ -656,7 +648,7 @@ def _summarise_results(results: list[dict]) -> dict[str, int]:
     return counts
 
 
-def generate_html(results: list[dict], sample_name: str, summary: dict[str, int], report_type: str = 'default') -> str:
+def generate_html(results: list[dict], sample_name: str, summary: dict[str, int], report_type: str) -> str:
     """Render the full HTML report from results via the Jinja2 template."""
     template_dir = Path(__file__).resolve().parent / 'templates'
     env = jinja2.Environment(
@@ -759,26 +751,27 @@ def generate_report(
     longtr_bed: str,
     output_html: str,
     output_json: str,
-    report_type: str = 'default',
+    report_type: str,
     loci_list: set[str] | None = None,
     sex: str = 'unknown',
+    sample_id: str = '',
 ):
     """Load references, scan VCF, optionally filter by loci list, and write outputs."""
     strchive = load_strchive_json(strchive_json)
     bed_entries = load_longtr_bed(longtr_bed)
     locus_index = build_locus_index(bed_entries)
-    results, sample_name = scan_vcf(vcf_path, locus_index, strchive, sex)
+    results = scan_vcf(vcf_path, locus_index, strchive, sex)
 
     if loci_list:
         results = [r for r in results if r['locus_id'] in loci_list]
 
     summary = _summarise_results(results)
 
-    html_content = generate_html(results, sample_name, summary, report_type)
+    html_content = generate_html(results, sample_id, summary, report_type)
     with open(output_html, 'w') as f:
         f.write(html_content)
 
-    json_output = build_json_output(results, sample_name, summary, strchive_json, longtr_bed)
+    json_output = build_json_output(results, sample_id, summary, strchive_json, longtr_bed)
     with open(output_json, 'w') as f:
         json.dump(json_output, f, indent=2)
 
@@ -806,9 +799,9 @@ def cli_main():
     parser.add_argument('--vcf_path', required=True, help='Path to LongTR VCF file')
     parser.add_argument('--strchive_json', required=True, help='Path to STRchive-loci.json')
     parser.add_argument('--longtr_bed', required=True, help='Path to STRchive LongTR BED catalog')
-    parser.add_argument('--output_html', default='longtr_pathogenic.html', help='Output HTML file')
-    parser.add_argument('--output_json', default='longtr_pathogenic.json', help='Output JSON file')
-    parser.add_argument('--report_type', default='default', help='Report type label (e.g., default, paediatric)')
+    parser.add_argument('--output_html', required=True, help='Output HTML file')
+    parser.add_argument('--output_json', required=True, help='Output JSON file')
+    parser.add_argument('--report_type', required=True, help='Loci list name this report covers')
     parser.add_argument('--loci_list', help='Locus IDs to include', nargs='+')
     parser.add_argument(
         '--sex',
@@ -816,6 +809,7 @@ def cli_main():
         choices=['male', 'female', 'unknown'],
         help='Reported sex; males are treated as hemizygous at chrX loci',
     )
+    parser.add_argument('--sample_id', required=True, help='Sample ID to display on the report')
     args = parser.parse_args()
 
     loci_set = set(args.loci_list) if args.loci_list else None
@@ -829,6 +823,7 @@ def cli_main():
         args.report_type,
         loci_set,
         args.sex,
+        args.sample_id,
     )
 
 

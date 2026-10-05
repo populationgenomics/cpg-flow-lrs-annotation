@@ -117,9 +117,9 @@ def longtr_index_page(
 
     local_json_files: list[tuple[str, str, object]] = []
     for sg_id, output_dict in sg_report_outputs.items():
-        json_keys = [k for k in output_dict if k.endswith('_json') or k == 'json']
+        json_keys = [k for k in output_dict if k.endswith('_json')]
         for json_key in json_keys:
-            report_type = json_key.removesuffix('_json') if json_key != 'json' else 'default'
+            report_type = json_key.removesuffix('_json')
             local_json = batch_instance.read_input(str(output_dict.pop(json_key)))
             local_json_files.append((sg_id, report_type, local_json))
 
@@ -133,9 +133,9 @@ def longtr_index_page(
         affected_status = _affected_label(meta.get('affected', 0))
 
         for key, report_path in output_dict.items():
-            if not key.endswith('_html') and key != 'html':
+            if not key.endswith('_html'):
                 continue
-            report_type = key.removesuffix('_html') if key != 'html' else 'default'
+            report_type = key.removesuffix('_html')
             url = str(report_path).replace(file_prefix, html_prefix)
             manifest_data.append(
                 {

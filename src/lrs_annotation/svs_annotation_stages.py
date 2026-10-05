@@ -54,12 +54,6 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
         sg_id = sequencing_group.id
         loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
 
-        if not loci_lists:
-            return {
-                'html': prefix / f'{sg_id}.longtr_pathogenic.html',
-                'json': prefix / f'{sg_id}.longtr_pathogenic.json',
-            }
-
         outputs = {}
         for list_name in loci_lists:
             outputs[f'{list_name}_html'] = prefix / f'{sg_id}__{list_name}.longtr_pathogenic.html'
@@ -79,12 +73,6 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
         outputs = self.expected_outputs(sequencing_group)
         loci_lists = get_longtr_loci_lists(sequencing_group.dataset.name)
 
-        if not loci_lists:
-            logger.warning(
-                f'No loci lists configured for {sequencing_group.dataset.name}, '
-                f'report for {sequencing_group.id} will include all disease loci',
-            )
-
         # cpg-flow populates this from metamist's reportedSex; males are hemizygous at chrX loci
         sex = str(sequencing_group.pedigree.sex).lower()
         if sex not in ('male', 'female'):
@@ -95,8 +83,9 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             vcf_path=vcf_path,
             outputs=outputs,
             job_attrs=self.get_job_attrs(sequencing_group),
-            loci_lists=loci_lists or None,
+            loci_lists=loci_lists,
             sex=sex,
+            sample_id=sequencing_group.external_id,
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)

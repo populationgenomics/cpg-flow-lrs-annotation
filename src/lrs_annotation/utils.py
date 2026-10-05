@@ -64,6 +64,11 @@ def get_longtr_loci_lists(dataset: str) -> dict[str, list[str]]:
     if not result and 'default' in loci_lists:
         logger.info(f'No loci lists configured for {prod_dataset}, falling back to default')
         return {'default': loci_lists['default']}
+    if not result:
+        raise ValueError(
+            f'No loci lists in scope for {prod_dataset} and no default list to fall back on. '
+            'Add the dataset to [longtr.loci_lists_datasets], or there is nothing to report on.',
+        )
     return result
 
 
