@@ -109,6 +109,24 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     return sgs_to_skip
 
 
+PHENOTYPE_QUERY = gql(
+    """
+    query Phenotypes($dataset: String!) {
+      project(name: $dataset) {
+        sequencingGroups(technology: {eq: "long-read"}) {
+          id
+          sample {
+            participant {
+              phenotypes
+            }
+          }
+        }
+      }
+    }
+    """,
+)
+
+
 @cache
 def query_for_lrs_vcfs(dataset_name: str) -> tuple[list[str], dict[str, dict]]:
     """
@@ -329,3 +347,32 @@ def get_sgs_from_datasets(multicohort_datasets: list[str]) -> tuple[list[str], d
         sg_ids.extend(query_sgs)
         vcfs.update(query_vcfs)  # type: ignore[arg-type]
     return sg_ids, vcfs
+
+
+@cache
+def query_for_participant_phenotypes(dataset_name: str) -> dict[str, dict]:
+    """
+    Query metamist for participant phenotypes, returning a mapping of SG ID to the fields
+    the report surfaces.
+
+    Phenotypes are a free-form key/value dict populated from REDCap exports, so every key is
+    optional and absent fields are simply omitted. Cached because the LongTR report stage runs
+    per sequencing group but this only needs fetching once per dataset.
+    """
+    dataset_name = dataset_for_access_level(dataset_name)
+    results = query(PHENOTYPE_QUERY, variables={'dataset': dataset_name})
+
+    phenotypes: dict[str, dict] = {}
+    for sg in results['project']['sequencingGroups']:
+        raw = ((sg.get('sample') or {}).get('participant') or {}).get('phenotypes') or {}
+        if not raw:
+            continue
+        entry = {
+            'birth_year': raw.get('Birth Year'),
+            'age_of_onset': raw.get('Age of Onset'),
+        }
+        # drop empties so the template can test a single key per row
+        phenotypes[sg['id']] = {k: v for k, v in entry.items() if v}
+
+    logger.info(f'Found phenotypes for {len(phenotypes)} sequencing groups in {dataset_name}')
+    return phenotypes

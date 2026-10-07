@@ -16,7 +16,10 @@ def longtr_pathogenic_report(
     job_attrs: dict[str, str],
     loci_lists: dict[str, list[str]],
     sample_id: str,
+    *,
     sex: str = 'unknown',
+    birth_year: str = '',
+    age_of_onset: str = '',
 ) -> Job:
     """
     Run the LongTR pathogenic screening script on a VCF file, one HTML+JSON per loci list.
@@ -35,6 +38,13 @@ def longtr_pathogenic_report(
     strchive_json = batch_instance.read_input(config.config_retrieve(['references', 'strchive_json']))
     longtr_bed = batch_instance.read_input(config.config_retrieve(['references', 'strchive_longtr_bed']))
 
+    # phenotype fields are optional per participant, so only pass what metamist holds
+    phenotype_args = ''
+    if birth_year:
+        phenotype_args += f"--birth_year '{birth_year}' \\\n        "
+    if age_of_onset:
+        phenotype_args += f"--age_of_onset '{age_of_onset}' \\\n        "
+
     for list_name, loci in loci_lists.items():
         html_rg = job[f'{list_name}_html']
         json_rg = job[f'{list_name}_json']
@@ -49,7 +59,7 @@ def longtr_pathogenic_report(
         --report_type {list_name} \\
         --sex {sex} \\
         --sample_id '{sample_id}' \\
-        --loci_list {loci_str}
+        {phenotype_args}--loci_list {loci_str}
     """)
         batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
         batch_instance.write_output(json_rg, str(outputs[f'{list_name}_json']))

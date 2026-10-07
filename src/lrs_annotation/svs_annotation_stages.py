@@ -16,6 +16,7 @@ from lrs_annotation.inputs import (
     query_for_longtr_vcfs,
     query_for_lrs_mappings,
     query_for_lrs_vcfs,
+    query_for_participant_phenotypes,
 )
 from lrs_annotation.jobs.ExportMtToElasticsearch import export_mt_to_elasticsearch
 from lrs_annotation.jobs.LongTRIndex import longtr_index_page
@@ -79,6 +80,9 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             logger.warning(f'No reported sex for {sequencing_group.id}, chrX loci will be reported as diploid')
             sex = 'unknown'
 
+        # cached per dataset, so this is one metamist call no matter how many SGs run
+        phenotypes = query_for_participant_phenotypes(sequencing_group.dataset.name).get(sequencing_group.id, {})
+
         job = longtr_pathogenic_report(
             vcf_path=vcf_path,
             outputs=outputs,
@@ -86,6 +90,8 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             loci_lists=loci_lists,
             sex=sex,
             sample_id=sequencing_group.external_id,
+            birth_year=phenotypes.get('birth_year', ''),
+            age_of_onset=phenotypes.get('age_of_onset', ''),
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)

@@ -12,6 +12,13 @@
   h1 { font-size: 1.5rem; margin-bottom: 4px; }
   .subtitle { color: var(--muted); margin-bottom: 20px; font-size: 0.85rem; }
 
+  .participant-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+                       padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 32px; flex-wrap: wrap; }
+  .participant-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
+                        letter-spacing: 0.4px; margin-bottom: 2px; }
+  .participant-value { font-size: 0.9rem; font-weight: 600; }
+  .participant-absent { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
                    gap: 10px; margin-bottom: 24px; }
   .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
@@ -114,9 +121,34 @@
 
 <h1>Pathogenic TR Expansion Screen{% if report_type and report_type != 'default' %} — {{ report_type | replace('_', ' ') | title }}{% endif %}</h1>
 <p class="subtitle">
-  Sample: <strong>{{ sample_name }}</strong> ·
   {{ results | length }} STRchive disease loci · {{ n_genotyped }} genotyped
 </p>
+
+<div class="participant-card">
+  <div class="participant-field">
+    <div class="participant-label">Sample</div>
+    <div class="participant-value">{{ sample_name }}</div>
+  </div>
+  <div class="participant-field">
+    <div class="participant-label">Reported sex</div>
+    <div class="participant-value">{{ participant.sex | default('unknown', true) | title }}</div>
+  </div>
+  <div class="participant-field">
+    <div class="participant-label">Birth year</div>
+    <div class="participant-value">
+      {%- if participant.birth_year %}{{ participant.birth_year }}
+        {%- if participant.age %} <span class="participant-absent">(age {{ participant.age }})</span>{% endif %}
+      {%- else %}<span class="participant-absent">not recorded</span>{% endif %}
+    </div>
+  </div>
+  <div class="participant-field">
+    <div class="participant-label">Reported age of onset</div>
+    <div class="participant-value">
+      {%- if participant.age_of_onset %}{{ participant.age_of_onset }}
+      {%- else %}<span class="participant-absent">not recorded</span>{% endif %}
+    </div>
+  </div>
+</div>
 
 <details class="glossary">
   <summary>Glossary &amp; external link guide</summary>

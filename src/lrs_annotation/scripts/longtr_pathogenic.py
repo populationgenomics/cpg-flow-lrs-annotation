@@ -23,6 +23,7 @@ References:
   Both from STRchive (github.com/dashnowlab/STRchive), with custom entries.
 """
 
+import datetime
 import json
 import math
 import re
@@ -606,7 +607,27 @@ def _summarise_results(results: list[dict]) -> dict[str, int]:
     return counts
 
 
-def generate_html(results: list[dict], sample_name: str, summary: dict[str, int], report_type: str) -> str:
+def _build_participant(sample_id: str, sex: str, birth_year: str, age_of_onset: str) -> dict:
+    """Assemble the participant header fields, deriving current age where a birth year is known."""
+    age = None
+    if birth_year.isdigit():
+        age = datetime.datetime.now(tz=datetime.timezone.utc).year - int(birth_year)
+    return {
+        'sample_id': sample_id,
+        'sex': sex,
+        'birth_year': birth_year,
+        'age': age,
+        'age_of_onset': age_of_onset,
+    }
+
+
+def generate_html(
+    results: list[dict],
+    sample_name: str,
+    summary: dict[str, int],
+    report_type: str,
+    participant: dict | None = None,
+) -> str:
     """Render the full HTML report from results via the Jinja2 template."""
     template_dir = Path(__file__).resolve().parent / 'templates'
     env = jinja2.Environment(
@@ -629,6 +650,7 @@ def generate_html(results: list[dict], sample_name: str, summary: dict[str, int]
 
     return template.render(
         sample_name=sample_name,
+        participant=participant or {},
         report_type=report_type,
         results=results,
         n_genotyped=summary.get('genotyped', 0),
@@ -711,6 +733,8 @@ def generate_report(
     sample_id: str,
     loci_list: set[str] | None = None,
     sex: str = 'unknown',
+    birth_year: str = '',
+    age_of_onset: str = '',
 ):
     """Load references, scan VCF, optionally filter by loci list, and write outputs."""
     strchive = load_strchive_json(strchive_json)
@@ -722,7 +746,8 @@ def generate_report(
 
     summary = _summarise_results(results)
 
-    html_content = generate_html(results, sample_id, summary, report_type)
+    participant = _build_participant(sample_id, sex, birth_year, age_of_onset)
+    html_content = generate_html(results, sample_id, summary, report_type, participant)
     with open(output_html, 'w') as f:
         f.write(html_content)
 
@@ -765,6 +790,8 @@ def cli_main():
         help='Reported sex; males are treated as hemizygous at chrX loci',
     )
     parser.add_argument('--sample_id', required=True, help='Sample ID to display on the report')
+    parser.add_argument('--birth_year', default='', help='Participant birth year, if recorded in metamist')
+    parser.add_argument('--age_of_onset', default='', help='Participant age of onset, if recorded in metamist')
     args = parser.parse_args()
 
     loci_set = set(args.loci_list) if args.loci_list else None
@@ -779,6 +806,8 @@ def cli_main():
         sample_id=args.sample_id,
         loci_list=loci_set,
         sex=args.sex,
+        birth_year=args.birth_year,
+        age_of_onset=args.age_of_onset,
     )
 
 
