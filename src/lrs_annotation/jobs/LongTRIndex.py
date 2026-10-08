@@ -4,7 +4,6 @@ for a dataset, with sample metadata from metamist.
 """
 
 import datetime
-import re
 
 from hailtop.batch.job import Job
 
@@ -51,16 +50,16 @@ def get_sg_metadata(
     if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
         query_dataset += '-test'
 
-    prod_dataset = dataset.removesuffix('-test')
-
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
 
-    project = result.get('project', {})
-    display_name = project.get('meta', {}).get('display_name', prod_dataset)
+    # everything named in the query is always returned, so only display_name needs a fallback -
+    # it lives inside the project's free-form meta and is not guaranteed to be set
+    project = result['project']
+    display_name = (project['meta'] or {}).get('display_name', query_dataset)
 
     sg_metadata: dict[str, dict[str, str | int]] = {}
-    for group in project.get('sequencingGroups', []):
-        sg_id = group.get('id')
+    for group in project['sequencingGroups']:
+        sg_id = group['id']
         # sample and participant are nullable in metamist, so `or {}` rather than a .get default
         sample = group.get('sample') or {}
         participant = sample.get('participant') or {}
@@ -91,6 +90,7 @@ def _affected_label(affected: int | str) -> str:
 def longtr_index_page(
     dataset_name: str,
     sg_report_outputs: dict[str, dict[str, Path]],
+    *,
     loci_lists: dict[str, list[str]],
     output_path: Path,
     latest_path: Path,
@@ -101,16 +101,13 @@ def longtr_index_page(
     Generate an index HTML page linking to all LongTR pathogenic reports for a dataset.
     Queries metamist for sample metadata (family, external ID, affected status).
     """
-    from lrs_annotation.scripts import longtr_index  # noqa: PLC0415
-
     batch_instance = hail_batch.get_batch()
 
-    job = batch_instance.new_job(f'LongTR Index Page for {dataset_name}', job_attrs | {'tool': 'longtr_index'})
+    job = batch_instance.new_job(f'LongTR Index Page for {dataset_name}', job_attrs)
     job.image(config.config_retrieve(['workflow', 'driver_image']))
 
     sg_ids = list(sg_report_outputs.keys())
     sg_metadata, display_name = get_sg_metadata(dataset_name, sg_ids)
-    dataset_title = re.sub(r'[-_]', ' ', display_name).title()
 
     file_prefix = config.config_retrieve(['storage', dataset_name, 'web'])
     html_prefix = config.config_retrieve(['storage', dataset_name, 'web_url'])
@@ -155,7 +152,7 @@ def longtr_index_page(
 
     args = [
         f'--manifest {local_manifest}',
-        f"--dataset '{dataset_title}'",
+        f"--dataset '{display_name}'",
         f'--output {job.output}',
     ]
     # Localised JSON paths only exist at command-render time, so they go on the command line
@@ -164,7 +161,7 @@ def longtr_index_page(
         entries = ' '.join(f'{sg_id}:{rt}:{lj}' for sg_id, rt, lj in local_json_files)
         args.append(f'--json-entry {entries}')
 
-    job.command(f'python3 {longtr_index.__file__} ' + ' '.join(args))
+    job.command('python3 -m lrs_annotation.scripts.longtr_index ' + ' '.join(args))
 
     batch_instance.write_output(job.output, str(output_path))
     batch_instance.write_output(job.output, str(latest_path))

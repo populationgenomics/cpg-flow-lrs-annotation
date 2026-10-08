@@ -7,8 +7,6 @@ from hailtop.batch.job import Job
 
 from cpg_utils import Path, config, hail_batch
 
-from lrs_annotation.scripts import longtr_pathogenic
-
 
 def longtr_pathogenic_report(
     vcf_path: str,
@@ -27,7 +25,7 @@ def longtr_pathogenic_report(
     """
     batch_instance = hail_batch.get_batch()
 
-    job = batch_instance.new_job('LongTR Pathogenic Report', job_attrs | {'tool': 'longtr_pathogenic'})
+    job = batch_instance.new_job('LongTR Pathogenic Report', job_attrs)
     job.image(config.config_retrieve(['workflow', 'driver_image']))
     job.storage('10GB')
 
@@ -40,20 +38,22 @@ def longtr_pathogenic_report(
     custom_loci = batch_instance.read_input(config.config_retrieve(['references', 'strchive_custom_json']))
 
     # phenotype fields are optional per participant, so only pass what metamist holds
-    phenotype_args = ''
+    phenotype_args = []
     if birth_year:
-        phenotype_args += f"--birth_year '{birth_year}' \\\n        "
+        phenotype_args.extend(['--birth_year', f"'{birth_year}'"])
     if age_of_onset:
-        phenotype_args += f"--age_of_onset '{age_of_onset}' \\\n        "
+        phenotype_args.extend(['--age_of_onset', f"'{age_of_onset}'"])
     if hpo_terms:
-        phenotype_args += f"--hpo_terms '{hpo_terms}' \\\n        "
+        phenotype_args.extend(['--hpo_terms', f"'{hpo_terms}'"])
+    phenotype_arg = ' '.join(phenotype_args)
 
     for list_name, loci in loci_lists.items():
         html_rg = job[f'{list_name}_html']
         json_rg = job[f'{list_name}_json']
         loci_str = ' '.join(loci)
+        # --loci_list is nargs='+', so every other argument has to precede it
         job.command(f"""
-    python3 {longtr_pathogenic.__file__} \\
+    python3 -m lrs_annotation.scripts.longtr_pathogenic \\
         --vcf_path {local_vcf} \\
         --strchive_json {strchive_json} \\
         --custom_loci_json {custom_loci} \\
@@ -61,8 +61,8 @@ def longtr_pathogenic_report(
         --output_json {json_rg} \\
         --report_type {list_name} \\
         --sex {sex} \\
-        --sample_id '{sample_id}' \\
-        {phenotype_args}--loci_list {loci_str}
+        --sample_id '{sample_id}' {phenotype_arg} \\
+        --loci_list {loci_str}
     """)
         batch_instance.write_output(html_rg, str(outputs[f'{list_name}_html']))
         batch_instance.write_output(json_rg, str(outputs[f'{list_name}_json']))

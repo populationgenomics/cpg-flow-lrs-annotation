@@ -338,12 +338,12 @@ def test_threshold_parts_enumerates_discrete_loci():
     assert _threshold_parts(VWA1) == [
         'Normal: 2',
         'Pathogenic: 1, 3',
-        'any other count: uncertain',
+        'Any other count: uncertain',
     ]
     assert _threshold_parts(MIR7_2) == [
         'Normal: 4',
         'Pathogenic: 3',
-        'any other count: uncertain',
+        'Any other count: uncertain',
     ]
     assert _threshold_parts(HTT) == [
         'Normal: ≤26',
