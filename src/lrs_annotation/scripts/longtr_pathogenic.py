@@ -320,7 +320,7 @@ def _threshold_parts(meta: dict) -> list[str]:
             for status, label in (('normal', 'Normal'), ('intermediate', 'Intermediate'), ('pathogenic', 'Pathogenic'))
             if by_status[status]
         ]
-        parts.append('any other count: uncertain')
+        parts.append('Any other count: uncertain')
         return parts
 
     parts = []
