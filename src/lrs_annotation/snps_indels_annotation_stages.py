@@ -420,6 +420,8 @@ class SubsetMtToDatasetWithHail(stage.DatasetStage):
 
         sg_hash = workflow.get_workflow().output_version
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'snps_indels' / 'mt' / 'checkpoints'
+        if family_sgs:
+            checkpoint_prefix = checkpoint_prefix / family_sgs['name_suffix']
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs(
             dataset=dataset_for_access_level(dataset.name),
