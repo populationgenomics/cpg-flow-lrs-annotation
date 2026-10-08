@@ -18,6 +18,13 @@
                         letter-spacing: 0.4px; margin-bottom: 2px; }
   .participant-value { font-size: 0.9rem; font-weight: 600; }
   .participant-absent { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  /* HPO terms can run to a dozen or more, so give them the full card width */
+  .participant-hpo { flex-basis: 100%; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px; }
+  .hpo-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .hpo-term { font-size: 0.72rem; font-family: 'SF Mono', Consolas, monospace; text-decoration: none;
+               color: #0a58ca; background: #eef1f4; border: 1px solid var(--border);
+               border-radius: 4px; padding: 1px 6px; }
+  .hpo-term:hover { background: #0d6efd; color: #fff; border-color: #0d6efd; }
 
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
                    gap: 10px; margin-bottom: 24px; }
@@ -134,10 +141,9 @@
     <div class="participant-value">{{ participant.sex | default('unknown', true) | title }}</div>
   </div>
   <div class="participant-field">
-    <div class="participant-label">Birth year</div>
+    <div class="participant-label">Age</div>
     <div class="participant-value">
-      {%- if participant.birth_year %}{{ participant.birth_year }}
-        {%- if participant.age %} <span class="participant-absent">(age {{ participant.age }})</span>{% endif %}
+      {%- if participant.age is not none %}{{ participant.age }}
       {%- else %}<span class="participant-absent">not recorded</span>{% endif %}
     </div>
   </div>
@@ -148,6 +154,16 @@
       {%- else %}<span class="participant-absent">not recorded</span>{% endif %}
     </div>
   </div>
+  {%- if participant.hpo_terms %}
+  <div class="participant-field participant-hpo">
+    <div class="participant-label">Reported phenotype ({{ participant.hpo_terms | length }} HPO terms)</div>
+    <div class="hpo-list">
+      {%- for term in participant.hpo_terms %}
+      <a class="hpo-term" href="https://hpo.jax.org/app/browse/term/{{ term }}" target="_blank" rel="noopener">{{ term }}</a>
+      {%- endfor %}
+    </div>
+  </div>
+  {%- endif %}
 </div>
 
 <details class="glossary">

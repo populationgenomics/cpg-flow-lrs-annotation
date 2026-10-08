@@ -92,6 +92,7 @@ class LongTRPathogenicReport(stage.SequencingGroupStage):
             sample_id=sequencing_group.external_id,
             birth_year=phenotypes.get('birth_year', ''),
             age_of_onset=phenotypes.get('age_of_onset', ''),
+            hpo_terms=','.join(phenotypes.get('hpo_terms', [])),
         )
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=job)

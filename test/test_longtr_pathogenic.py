@@ -18,6 +18,7 @@ from lrs_annotation.scripts.longtr_pathogenic import (
     _process_vcf_record,
     _summarise_results,
     _threshold_parts,
+    catalog_entries,
     classify_allele,
     compute_allele_repeat_units,
     count_motif_in_sequence,
@@ -158,13 +159,13 @@ def test_compute_allele_repeat_units_selects_ref_and_alt():
 
 
 def test_matches_locus_respects_tolerance():
-    """A variant span matches a BED entry within MATCH_TOLERANCE bp at both ends, not beyond.
+    """A variant span matches a catalog entry within MATCH_TOLERANCE bp at both ends, not beyond.
 
     Offsets are derived from the constant so the tolerance can be retuned without
     editing the expectations.
     """
     start, end = 1000, 1050
-    entry = _bed_match('chr1', start, 'CAG', 'L1')
+    entry = _entry_for('chr1', start, 'CAG', 'L1')
     tol = MATCH_TOLERANCE
 
     assert _matches_locus(entry, start, end) is True
@@ -172,6 +173,39 @@ def test_matches_locus_respects_tolerance():
     assert _matches_locus(entry, start - tol, end - tol) is True  # and in the other direction
     assert _matches_locus(entry, start + tol + 1, end) is False  # one past, at the start
     assert _matches_locus(entry, start, end + tol + 1) is False  # one past, at the end
+
+
+def test_catalog_entries_derives_regions_from_the_merged_catalog():
+    """Regions come straight from the catalog, so no separate BED has to be kept in sync."""
+    strchive = {
+        'HD_HTT': {
+            'chrom': 'chr4',
+            'start_hg38': 3074876,
+            'stop_hg38': 3074933,
+            'reference_motif_reference_orientation': ['CAG'],
+        },
+        'OPDM5_ABCD3': {
+            'chrom': 'chr1',
+            'start_hg38': 94418421,
+            'stop_hg38': 94418444,
+            'reference_motif_reference_orientation': ['CCG'],
+        },
+        # an overlay entry that only overrides thresholds carries no coordinates of its own,
+        # and is unreachable by region fetch, so it must not become an entry
+        'NO_COORDS': {'pathogenic_min': 1},
+    }
+
+    entries = catalog_entries(strchive)
+
+    # sorted by position, so chr1 leads regardless of catalog insertion order
+    assert [e['locus_id'] for e in entries] == ['OPDM5_ABCD3', 'HD_HTT']
+    assert entries[1] == {
+        'chrom': 'chr4',
+        'start': 3074876,
+        'end': 3074933,
+        'motifs': ['CAG'],
+        'locus_id': 'HD_HTT',
+    }
 
 
 VCF_HEADER = [
@@ -212,8 +246,8 @@ def _variant(tmp_path, chrom, start, motif, *, n_ref, n_alt, gt) -> Variant:
     return next(iter(VCF(str(path))))
 
 
-def _bed_match(chrom, start, motif, locus_id) -> dict:
-    """Build a BED catalog entry for a locus spanning 50bp from start."""
+def _entry_for(chrom, start, motif, locus_id) -> dict:
+    """Build a catalog region entry for a locus spanning 50bp from start."""
     return {'chrom': chrom, 'start': start, 'end': start + 50, 'motifs': [motif], 'locus_id': locus_id}
 
 
@@ -232,7 +266,7 @@ def _bed_match(chrom, start, motif, locus_id) -> dict:
 def test_genotype_parsing_handles_haploid_and_missing(tmp_path, gt, expected_indices, expected_gt):
     """Haploid, diploid and missing calls all resolve to a usable allele pair."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=20, n_alt=28, gt=gt)
-    match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
+    match = _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex='female')
 
     counts = {0: 20.0, 1: 28.0}
@@ -244,7 +278,7 @@ def test_genotype_parsing_handles_haploid_and_missing(tmp_path, gt, expected_ind
 def test_hemizygous_collapse_keeps_larger_count(tmp_path, a_ref, a_alt):
     """Males get one chrX allele; the larger of LongTR's diploid pair is kept either way round."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=a_ref, n_alt=a_alt, gt='0|1')
-    match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
+    match = _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex='male')
 
     assert result['hemizygous'] is True
@@ -257,7 +291,7 @@ def test_hemizygous_collapse_keeps_larger_count(tmp_path, a_ref, a_alt):
 def test_hemizygous_not_applied_to_autosomes(tmp_path):
     """An autosomal locus keeps both alleles even for a male sample."""
     variant = _variant(tmp_path, 'chr4', 3074876, 'CAG', n_ref=HTT_REF_COUNT, n_alt=HTT_ALT_COUNT, gt='0|1')
-    match = _bed_match('chr4', 3074876, 'CAG', 'HD_HTT')
+    match = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')
     result = _process_vcf_record(variant, match, HTT, 3074876, 3074926, sex='male')
 
     assert result['hemizygous'] is False
@@ -276,7 +310,7 @@ def test_hemizygous_not_applied_to_autosomes(tmp_path):
 def test_xlinked_recessive_single_pathogenic_allele(tmp_path, sex, expected_status):
     """A female heterozygote at an XR locus is downgraded to uncertain; males and unknown sex are not."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=AR_REF_COUNT, n_alt=AR_ALT_COUNT, gt='0|1')
-    match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
+    match = _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex=sex)
     assert result['locus_status'] == expected_status
 
@@ -284,7 +318,7 @@ def test_xlinked_recessive_single_pathogenic_allele(tmp_path, sex, expected_stat
 def test_female_homozygous_xr_stays_pathogenic(tmp_path):
     """Two pathogenic alleles at an XR locus means affected, so the downgrade must not apply."""
     variant = _variant(tmp_path, 'chrX', 67545316, 'CAG', n_ref=AR_REF_COUNT, n_alt=AR_ALT_COUNT, gt='1|1')
-    match = _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR')
+    match = _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR')
     result = _process_vcf_record(variant, match, AR, 67545316, 67545366, sex='female')
 
     assert result['allele1_status'] == result['allele2_status'] == 'pathogenic'
@@ -294,7 +328,7 @@ def test_female_homozygous_xr_stays_pathogenic(tmp_path):
 def test_female_xlinked_dominant_stays_pathogenic(tmp_path):
     """X-linked dominant loci manifest in females, so the downgrade must not apply to FMR1."""
     variant = _variant(tmp_path, 'chrX', 147912049, 'CGG', n_ref=30, n_alt=250, gt='0|1')
-    match = _bed_match('chrX', 147912049, 'CGG', 'FXS_FMR1')
+    match = _entry_for('chrX', 147912049, 'CGG', 'FXS_FMR1')
     result = _process_vcf_record(variant, match, FMR1, 147912049, 147912099, sex='female')
     assert result['locus_status'] == 'pathogenic'
 
@@ -321,8 +355,8 @@ def test_threshold_parts_enumerates_discrete_loci():
 def test_add_missing_loci_fills_every_field_the_template_reads():
     """Loci absent from the VCF still need the full key set, since the template reads them unconditionally."""
     entries = [
-        _bed_match('chr4', 3074876, 'CAG', 'HD_HTT'),
-        _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR'),
+        _entry_for('chr4', 3074876, 'CAG', 'HD_HTT'),
+        _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR'),
     ]
     results = {}
     _add_missing_loci(results, entries, {'HD_HTT': HTT, 'SBMA_AR': AR})
@@ -340,7 +374,7 @@ def test_add_missing_loci_fills_every_field_the_template_reads():
 
 def test_add_missing_loci_leaves_genotyped_entries_alone():
     """An already-genotyped locus must not be overwritten by a not-genotyped placeholder."""
-    entries = [_bed_match('chr4', 3074876, 'CAG', 'HD_HTT')]
+    entries = [_entry_for('chr4', 3074876, 'CAG', 'HD_HTT')]
     results = {'HD_HTT': {'locus_status': 'pathogenic', 'genotyped': True}}
     _add_missing_loci(results, entries, {'HD_HTT': HTT})
 
@@ -400,11 +434,11 @@ def indexed_vcf(tmp_path):
 
 
 @pytest.fixture
-def bed_entries():
-    """The flat BED catalog scan_vcf iterates, one entry per disease locus."""
+def catalog_regions():
+    """The flat region list scan_vcf iterates, one entry per disease locus."""
     return [
-        _bed_match('chr4', 3074876, 'CAG', 'HD_HTT'),
-        _bed_match('chrX', 67545316, 'CAG', 'SBMA_AR'),
+        _entry_for('chr4', 3074876, 'CAG', 'HD_HTT'),
+        _entry_for('chrX', 67545316, 'CAG', 'SBMA_AR'),
     ]
 
 
@@ -430,7 +464,7 @@ def test_scan_vcf_finds_short_ref_offset_behind_the_catalog_entry(tmp_path, n_re
     (FXN and PABPN1 are 19bp), so such a record's span can end before the catalog entry
     begins. The region fetch is padded by the tolerance precisely to still reach it.
     """
-    entry = _bed_match('chr4', 3074876, 'CAG', 'HD_HTT')
+    entry = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')
     vcf = _write_indexed(
         tmp_path,
         [_vcf_row('chr4', 3074876 - MATCH_TOLERANCE, 'CAG', n_ref=n_ref, n_alt=n_ref + 1, gt='0|1')],
@@ -452,7 +486,7 @@ def test_scan_vcf_finds_short_ref_offset_behind_the_catalog_entry(tmp_path, n_re
 )
 def test_scan_vcf_tolerates_offset_coordinates(tmp_path, offset, should_match):
     """LongTR coordinates do not exactly match STRchive's, so matching must survive a shift."""
-    entry = _bed_match('chr4', 3074876, 'CAG', 'HD_HTT')
+    entry = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')
     vcf = _write_indexed(
         tmp_path,
         [_vcf_row('chr4', 3074876 + offset, 'CAG', n_ref=HTT_REF_COUNT, n_alt=HTT_ALT_COUNT, gt='0|1')],
@@ -462,10 +496,10 @@ def test_scan_vcf_tolerates_offset_coordinates(tmp_path, offset, should_match):
 
 
 @needs_htslib
-def test_scan_vcf_end_to_end(indexed_vcf, bed_entries):
+def test_scan_vcf_end_to_end(indexed_vcf, catalog_regions):
     """Reads a VCF, matches both loci, and sorts worst-first."""
     strchive = {'HD_HTT': HTT, 'SBMA_AR': AR}
-    results = scan_vcf(indexed_vcf, bed_entries, strchive, 'female')
+    results = scan_vcf(indexed_vcf, catalog_regions, strchive, 'female')
 
     by_id = {r['locus_id']: r for r in results}
     assert set(by_id) == {'HD_HTT', 'SBMA_AR'}
@@ -480,10 +514,10 @@ def test_scan_vcf_end_to_end(indexed_vcf, bed_entries):
 
 
 @needs_htslib
-def test_scan_vcf_male_collapses_chrx(indexed_vcf, bed_entries):
+def test_scan_vcf_male_collapses_chrx(indexed_vcf, catalog_regions):
     """The same VCF read as male yields a hemizygous chrX call and an untouched autosome."""
     strchive = {'HD_HTT': HTT, 'SBMA_AR': AR}
-    results = scan_vcf(indexed_vcf, bed_entries, strchive, 'male')
+    results = scan_vcf(indexed_vcf, catalog_regions, strchive, 'male')
     by_id = {r['locus_id']: r for r in results}
 
     assert by_id['SBMA_AR']['hemizygous'] is True

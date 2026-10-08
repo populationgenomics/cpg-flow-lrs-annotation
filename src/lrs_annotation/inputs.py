@@ -367,9 +367,11 @@ def query_for_participant_phenotypes(dataset_name: str) -> dict[str, dict]:
         raw = ((sg.get('sample') or {}).get('participant') or {}).get('phenotypes') or {}
         if not raw:
             continue
+        hpo = [t.strip() for t in str(raw.get('HPO Terms (present)', '')).split(',') if t.strip()]
         entry = {
             'birth_year': raw.get('Birth Year'),
             'age_of_onset': raw.get('Age of Onset'),
+            'hpo_terms': hpo,
         }
         # drop empties so the template can test a single key per row
         phenotypes[sg['id']] = {k: v for k, v in entry.items() if v}

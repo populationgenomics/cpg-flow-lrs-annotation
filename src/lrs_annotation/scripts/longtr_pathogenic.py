@@ -36,8 +36,6 @@ from cyvcf2 import VCF
 from loguru import logger
 from markupsafe import Markup
 
-MIN_BED_COLUMNS = 5
-
 MATCH_TOLERANCE = 20
 
 # Worst-first ordering, used both to reduce two alleles to a locus call and to sort the report.
@@ -67,34 +65,51 @@ EXTERNAL_LINK_DEFS = [
 ]
 
 
-def load_strchive_json(path: str) -> dict:
-    """Load STRchive loci JSON and index entries by locus ID."""
+def load_strchive_json(path: str, custom_path: str | None = None) -> dict:
+    """Load the STRchive catalog by locus ID, overlaying locally curated loci on top.
+
+    The base file is kept as a pristine copy of upstream STRchive so it can be re-synced
+    wholesale. Anything local - extra loci, or thresholds upstream does not publish - lives in
+    the overlay and wins on an ID collision. Overlay entries may be partial, in which case the
+    remaining fields are inherited from upstream.
+    """
     with open(path) as f:
-        loci = json.load(f)
-    return {locus['id']: locus for locus in loci}
+        loci = {locus['id']: locus for locus in json.load(f)}
+    upstream_count = len(loci)
+
+    if custom_path:
+        with open(custom_path) as f:
+            custom = json.load(f)
+        added = sum(1 for entry in custom if entry['id'] not in loci)
+        for entry in custom:
+            locus_id = entry['id']
+            loci[locus_id] = {**loci.get(locus_id, {}), **entry}
+        logger.info(
+            f'Loaded {upstream_count} loci from STRchive, overlaid {len(custom)} locally curated '
+            f'({added} new, {len(custom) - added} overriding upstream)',
+        )
+
+    return loci
 
 
-def load_longtr_bed(path: str) -> list[dict]:
-    """Parse a LongTR BED catalog into a list of locus entries."""
+def catalog_entries(strchive: dict) -> list[dict]:
+    """Flatten the merged catalog into the hg38 regions to fetch, one per locus."""
     entries = []
-    with open(path) as f:
-        for raw_line in f:
-            stripped = raw_line.strip()
-            if not stripped or stripped.startswith('#'):
-                continue
-            parts = stripped.split('\t')
-            if len(parts) < MIN_BED_COLUMNS:
-                continue
-            entries.append(
-                {
-                    'chrom': parts[0],
-                    'start': int(parts[1]),
-                    'end': int(parts[2]),
-                    'motifs': parts[3].split(','),
-                    'locus_id': parts[4],
-                }
-            )
-    return entries
+    for locus_id, meta in strchive.items():
+        start, end = meta.get('start_hg38'), meta.get('stop_hg38')
+        if not meta.get('chrom') or start is None or end is None:
+            logger.warning(f'Skipping {locus_id}: no hg38 coordinates in the catalog')
+            continue
+        entries.append(
+            {
+                'chrom': meta['chrom'],
+                'start': int(start),
+                'end': int(end),
+                'motifs': meta.get('reference_motif_reference_orientation', []),
+                'locus_id': locus_id,
+            }
+        )
+    return sorted(entries, key=lambda e: (e['chrom'], e['start']))
 
 
 def _matches_locus(entry: dict, vcf_start: int, vcf_end: int) -> bool:
@@ -347,16 +362,14 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
-def scan_vcf(vcf_path: str, bed_entries: list[dict], strchive: dict, sex: str = 'unknown') -> list[dict]:
+def scan_vcf(vcf_path: str, entries: list[dict], strchive: dict, sex: str = 'unknown') -> list[dict]:
     """Fetch each disease locus from an indexed VCF, returning results sorted worst-first."""
     results = {}
     vcf = VCF(vcf_path)
 
-    for entry in bed_entries:
+    for entry in entries:
         locus_id = entry['locus_id']
-        meta = strchive.get(locus_id)
-        if meta is None or locus_id in results:
-            continue
+        meta = strchive[locus_id]
 
         # Pad the fetch by the tolerance, since LongTR's coordinates do not exactly match
         # STRchive's; the same fuzzy comparison then filters whatever the index returns.
@@ -371,7 +384,7 @@ def scan_vcf(vcf_path: str, bed_entries: list[dict], strchive: dict, sex: str = 
             break
 
     vcf.close()
-    _add_missing_loci(results, bed_entries, strchive)
+    _add_missing_loci(results, entries, strchive)
 
     return sorted(
         results.values(),
@@ -466,13 +479,13 @@ def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 
     return base
 
 
-def _add_missing_loci(results: dict, bed_entries: list[dict], strchive: dict) -> None:
+def _add_missing_loci(results: dict, entries: list[dict], strchive: dict) -> None:
     """Add not-genotyped placeholder entries for loci absent from the VCF."""
-    for entry in bed_entries:
+    for entry in entries:
         lid = entry['locus_id']
         if lid in results:
             continue
-        meta = strchive.get(lid, {})
+        meta = strchive[lid]
         base = _build_locus_meta(meta, entry)
         base.update(
             {
@@ -607,17 +620,23 @@ def _summarise_results(results: list[dict]) -> dict[str, int]:
     return counts
 
 
-def _build_participant(sample_id: str, sex: str, birth_year: str, age_of_onset: str) -> dict:
-    """Assemble the participant header fields, deriving current age where a birth year is known."""
+def _build_participant(
+    sample_id: str,
+    sex: str,
+    birth_year: str,
+    age_of_onset: str,
+    hpo_terms: str,
+) -> dict:
+    """Assemble the participant header fields, deriving age from the recorded birth year."""
     age = None
     if birth_year.isdigit():
         age = datetime.datetime.now(tz=datetime.timezone.utc).year - int(birth_year)
     return {
         'sample_id': sample_id,
         'sex': sex,
-        'birth_year': birth_year,
         'age': age,
         'age_of_onset': age_of_onset,
+        'hpo_terms': [t.strip() for t in hpo_terms.split(',') if t.strip()],
     }
 
 
@@ -672,7 +691,7 @@ def build_json_output(
     sample_name: str,
     summary: dict[str, int],
     strchive_json_path: str,
-    longtr_bed_path: str,
+    custom_loci_json_path: str,
 ) -> dict:
     """Build the structured JSON output dict from screening results."""
     json_fields = (
@@ -715,7 +734,7 @@ def build_json_output(
         'sample_name': sample_name,
         'catalog': {
             'strchive_json': strchive_json_path,
-            'longtr_bed': longtr_bed_path,
+            'custom_loci_json': custom_loci_json_path,
         },
         'summary': summary,
         'loci': [{k: v for k, v in r.items() if k in json_fields} for r in results],
@@ -725,7 +744,6 @@ def build_json_output(
 def generate_report(
     vcf_path: str,
     strchive_json: str,
-    longtr_bed: str,
     output_html: str,
     output_json: str,
     *,
@@ -735,23 +753,24 @@ def generate_report(
     sex: str = 'unknown',
     birth_year: str = '',
     age_of_onset: str = '',
+    hpo_terms: str = '',
+    custom_loci_json: str = '',
 ):
     """Load references, scan VCF, optionally filter by loci list, and write outputs."""
-    strchive = load_strchive_json(strchive_json)
-    bed_entries = load_longtr_bed(longtr_bed)
-    results = scan_vcf(vcf_path, bed_entries, strchive, sex)
+    strchive = load_strchive_json(strchive_json, custom_loci_json or None)
+    results = scan_vcf(vcf_path, catalog_entries(strchive), strchive, sex)
 
     if loci_list:
         results = [r for r in results if r['locus_id'] in loci_list]
 
     summary = _summarise_results(results)
 
-    participant = _build_participant(sample_id, sex, birth_year, age_of_onset)
+    participant = _build_participant(sample_id, sex, birth_year, age_of_onset, hpo_terms)
     html_content = generate_html(results, sample_id, summary, report_type, participant)
     with open(output_html, 'w') as f:
         f.write(html_content)
 
-    json_output = build_json_output(results, sample_id, summary, strchive_json, longtr_bed)
+    json_output = build_json_output(results, sample_id, summary, strchive_json, custom_loci_json)
     with open(output_json, 'w') as f:
         json.dump(json_output, f, indent=2)
 
@@ -777,8 +796,12 @@ def cli_main():
         description='Screen a LongTR VCF against STRchive disease-associated TR loci.',
     )
     parser.add_argument('--vcf_path', required=True, help='Path to LongTR VCF file')
-    parser.add_argument('--strchive_json', required=True, help='Path to STRchive-loci.json')
-    parser.add_argument('--longtr_bed', required=True, help='Path to STRchive LongTR BED catalog')
+    parser.add_argument('--strchive_json', required=True, help='Path to STRchive-loci.json (upstream)')
+    parser.add_argument(
+        '--custom_loci_json',
+        default='',
+        help='Path to locally curated loci overlaid on the STRchive catalog',
+    )
     parser.add_argument('--output_html', required=True, help='Output HTML file')
     parser.add_argument('--output_json', required=True, help='Output JSON file')
     parser.add_argument('--report_type', required=True, help='Loci list name this report covers')
@@ -792,6 +815,7 @@ def cli_main():
     parser.add_argument('--sample_id', required=True, help='Sample ID to display on the report')
     parser.add_argument('--birth_year', default='', help='Participant birth year, if recorded in metamist')
     parser.add_argument('--age_of_onset', default='', help='Participant age of onset, if recorded in metamist')
+    parser.add_argument('--hpo_terms', default='', help='Comma-separated HPO term IDs, if recorded in metamist')
     args = parser.parse_args()
 
     loci_set = set(args.loci_list) if args.loci_list else None
@@ -799,7 +823,6 @@ def cli_main():
     generate_report(
         args.vcf_path,
         args.strchive_json,
-        args.longtr_bed,
         args.output_html,
         args.output_json,
         report_type=args.report_type,
@@ -808,6 +831,8 @@ def cli_main():
         sex=args.sex,
         birth_year=args.birth_year,
         age_of_onset=args.age_of_onset,
+        hpo_terms=args.hpo_terms,
+        custom_loci_json=args.custom_loci_json,
     )
 
 
