@@ -34,6 +34,12 @@ ref_fasta = 'gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapie
 
 [references]
 avi_table = 'gs://cpg-common-main/alphagenome/combined_sigmoid_with_cpg.ht'
+strchive_json = 'gs://cpg-common-test/references/strchive/STRchive-loci-20260930.json'
+strchive_custom_json = 'gs://cpg-common-test/references/strchive/extra-loci-20261008.json'
+
+# LongTR loci lists and dataset mappings are configured externally in
+# production-pipelines-configuration at [longtr.loci_lists] and [longtr.loci_lists_datasets]
+
 
 [elasticsearch]
 # Configure access to ElasticSearch server

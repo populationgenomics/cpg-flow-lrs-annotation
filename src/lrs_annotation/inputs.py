@@ -53,6 +53,22 @@ LRS_IDS_QUERY = gql(
     """,
 )
 
+LONGTR_QUERY = gql(
+    """
+    query LongTRQuery($dataset: String!) {
+      project(name: $dataset) {
+        sequencingGroups(technology: {eq: "long-read"}) {
+          id
+          analyses(type: {eq: "longtr"}, active: {eq: true}) {
+            output
+            outputs
+          }
+        }
+      }
+    }
+    """,
+)
+
 
 def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
     """
@@ -91,6 +107,24 @@ def find_sgs_to_skip(sg_vcf_dict: dict[str, dict]) -> set[str]:
         ).endswith(parental_id_suffixes):
             sgs_to_skip.add(sg_id)
     return sgs_to_skip
+
+
+PHENOTYPE_QUERY = gql(
+    """
+    query Phenotypes($dataset: String!) {
+      project(name: $dataset) {
+        sequencingGroups(technology: {eq: "long-read"}) {
+          id
+          sample {
+            participant {
+              phenotypes
+            }
+          }
+        }
+      }
+    }
+    """,
+)
 
 
 @cache
@@ -285,6 +319,22 @@ def get_lrs_id_from_sample(
     return sample['meta'].get('lrs_id', None)
 
 
+@cache
+def query_for_longtr_vcfs(dataset_name: str) -> dict[str, str]:
+    """
+    Query metamist for LongTR VCF analyses, returning a mapping of SG ID to VCF path.
+    """
+    dataset_name = dataset_for_access_level(dataset_name)
+    results = query(LONGTR_QUERY, variables={'dataset': dataset_name})
+    sg_vcfs: dict[str, str] = {}
+    for sg in results['project']['sequencingGroups']:
+        for analysis in sg['analyses']:
+            vcf_path = analysis.get('outputs', {}).get('path') or analysis.get('output', '')
+            if vcf_path:
+                sg_vcfs[sg['id']] = vcf_path
+    return sg_vcfs
+
+
 def get_sgs_from_datasets(multicohort_datasets: list[str]) -> tuple[list[str], dict]:
     """
     Returns the sequencing group IDs from multicohort datasets, filtered to the
@@ -297,3 +347,34 @@ def get_sgs_from_datasets(multicohort_datasets: list[str]) -> tuple[list[str], d
         sg_ids.extend(query_sgs)
         vcfs.update(query_vcfs)  # type: ignore[arg-type]
     return sg_ids, vcfs
+
+
+@cache
+def query_for_participant_phenotypes(dataset_name: str) -> dict[str, dict]:
+    """
+    Query metamist for participant phenotypes, returning a mapping of SG ID to the fields
+    the report surfaces.
+
+    Phenotypes are a free-form key/value dict populated from REDCap exports, so every key is
+    optional and absent fields are simply omitted. Cached because the LongTR report stage runs
+    per sequencing group but this only needs fetching once per dataset.
+    """
+    dataset_name = dataset_for_access_level(dataset_name)
+    results = query(PHENOTYPE_QUERY, variables={'dataset': dataset_name})
+
+    phenotypes: dict[str, dict] = {}
+    for sg in results['project']['sequencingGroups']:
+        raw = ((sg.get('sample') or {}).get('participant') or {}).get('phenotypes') or {}
+        if not raw:
+            continue
+        hpo = [t.strip() for t in str(raw.get('HPO Terms (present)', '')).split(',') if t.strip()]
+        entry = {
+            'birth_year': raw.get('Birth Year'),
+            'age_of_onset': raw.get('Age of Onset'),
+            'hpo_terms': hpo,
+        }
+        # drop empties so the template can test a single key per row
+        phenotypes[sg['id']] = {k: v for k, v in entry.items() if v}
+
+    logger.info(f'Found phenotypes for {len(phenotypes)} sequencing groups in {dataset_name}')
+    return phenotypes
