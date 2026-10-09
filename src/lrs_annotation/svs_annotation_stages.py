@@ -34,6 +34,7 @@ from lrs_annotation.jobs.svs import (
 from lrs_annotation.utils import (
     es_password,
     get_dataset_names,
+    get_family_sequencing_groups,
     get_longtr_loci_lists,
     get_query_filter_from_config,
     get_sg_vcfs_file_path,
@@ -469,7 +470,14 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         Expected to generate a matrix table
         """
         sg_hash = workflow.get_workflow().output_version
-        return {'mt': (dataset.prefix() / 'mt' / f'LongReadSV-{sg_hash}-{dataset.name}.mt')}
+        mt_name = f'LongReadSV-{sg_hash}-{dataset.name}'
+        if family_sgs := get_family_sequencing_groups(dataset):
+            return {
+                'mt': (dataset.prefix() / 'mt' / f'{mt_name}-{family_sgs["name_suffix"]}.mt'),
+            }
+        return {
+            'mt': (dataset.prefix() / 'mt' / f'{mt_name}.mt'),
+        }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -486,14 +494,21 @@ class SubsetSVsMtToDatasetWithHail(stage.DatasetStage):
         if eligible_datasets is not None and dataset.name not in eligible_datasets:
             logger.info(f'Skipping MT writing for {dataset}')
             return self.make_outputs(dataset)
+
+        if family_sgs := get_family_sequencing_groups(dataset):
+            sg_ids = family_sgs['family_sg_ids']
+        else:
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
+
         mt_path = inputs.as_path(target=get_multicohort(), stage=AnnotateCohortSVsMtFromVcfWithHail, key='mt')
+
         outputs = self.expected_outputs(dataset)
 
         sg_hash = workflow.get_workflow().output_version
         checkpoint_prefix = dataset.tmp_prefix() / sg_hash / 'svs' / 'mt' / 'checkpoints'
-
-        sg_ids, _ = get_sgs_from_datasets([dataset.name])
-        sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
+        if family_sgs:
+            checkpoint_prefix = checkpoint_prefix / family_sgs['name_suffix']
 
         jobs = AnnotateDatasetMatrixtable.annotate_dataset_jobs_sv(
             dataset=dataset_for_access_level(dataset.name),
@@ -522,6 +537,8 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         sg_hash = workflow.get_workflow().output_version
         sequencing_type = config_retrieve(['workflow', 'sequencing_type'])
         index_name = f'{dataset.name}-{sequencing_type}-LR-SV-{sg_hash}'.lower()
+        if family_sgs := get_family_sequencing_groups(dataset):
+            index_name += f'-{family_sgs["name_suffix"]}'
         return {
             'index_name': index_name,
             'done_flag': dataset.prefix() / 'svs' / 'es' / f'{index_name}.done',
@@ -557,7 +574,10 @@ class ExportSVsMtToElasticIndex(stage.DatasetStage):
         index_name = str(outputs['index_name'])
         done_flag = str(outputs['done_flag'])
 
-        sg_ids, _ = get_sgs_from_datasets([dataset.name])
+        if family_sgs := get_family_sequencing_groups(dataset):
+            sg_ids = family_sgs['family_sg_ids']
+        else:
+            sg_ids, _ = get_sgs_from_datasets([dataset.name])
         sg_ids = [sg_id for sg_id in sg_ids if sg_id in get_multicohort().get_sequencing_group_ids()]
 
         job = export_mt_to_elasticsearch(
