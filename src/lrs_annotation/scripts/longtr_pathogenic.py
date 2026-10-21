@@ -117,6 +117,31 @@ def _matches_locus(entry: dict, vcf_start: int, vcf_end: int) -> bool:
     return abs(vcf_start - entry['start']) <= MATCH_TOLERANCE and abs(vcf_end - entry['end']) <= MATCH_TOLERANCE
 
 
+COMPLEMENT = str.maketrans('ACGTRYKMBVDHN', 'TGCAYRMKVBHDN')
+
+
+def _motif_forms(motif: str) -> set[str]:
+    """Every rotation of a motif and of its reverse complement.
+
+    The two catalogs describe the same repeat from different starting points and strands -
+    STRchive's CGG is TRGT's GCG or GGC - so a literal comparison disagrees at roughly half
+    the loci, all of them spuriously.
+    """
+    rc = motif.translate(COMPLEMENT)[::-1]
+    return {form[i:] + form[:i] for form in (motif, rc) for i in range(len(form))}
+
+
+def _motifs_agree(ours: str, theirs: str) -> bool:
+    """Whether two motifs describe the same repeat, allowing rotation, strand and IUPAC codes."""
+    if len(ours) != len(theirs):
+        return False
+    expand = {code: bases.strip('[]') for code, bases in IUPAC_MAP.items()}
+    return any(
+        all(set(expand.get(a, a)) & set(expand.get(b, b)) for a, b in zip(ours.upper(), form, strict=True))
+        for form in _motif_forms(theirs.upper())
+    )
+
+
 def _format_value(variant, key: str, default: str = '.') -> str:
     """Read a single-sample FORMAT field as a display string, or default when absent."""
     try:
@@ -362,6 +387,59 @@ def _build_locus_meta(meta: dict, entry: dict) -> dict:
     }
 
 
+def _choose_record(entry: dict, candidates: list[tuple]) -> tuple | None:
+    """Pick the record that best describes this locus, and say whether it is an approximation.
+
+    Preference order:
+      1. a record whose boundaries sit within MATCH_TOLERANCE of the catalog's - an exact match,
+         reported without qualification. Where several qualify, the one whose span is closest to
+         the catalog's, since the tolerance is proportionally huge for a short locus and a
+         fragment of the tract can satisfy it as readily as the whole tract.
+      2. otherwise a record carrying our motif, again closest span first. The count is then taken
+         over a region the catalog did not define, so the result is flagged as approximate.
+
+    Returns (variant, start, end, approximate) or None when nothing usable overlaps.
+    """
+    if not candidates:
+        return None
+    locus_span = entry['end'] - entry['start']
+    ours = entry['motifs'][0] if entry['motifs'] else ''
+
+    def closest(group: list[tuple]) -> tuple:
+        return min(group, key=lambda c: abs((c[2] - c[1]) - locus_span))
+
+    exact = [c for c in candidates if _matches_locus(entry, c[1], c[2])]
+    if exact:
+        variant, start, end = closest(exact)
+        return variant, start, end, False
+
+    by_motif = [c for c in candidates if any(_motifs_agree(ours, m) for m in (_record_motifs(c[0]) or [ours]))]
+    if by_motif:
+        variant, start, end = closest(by_motif)
+        return variant, start, end, True
+
+    return None
+
+
+def _record_motifs(variant) -> list[str]:
+    """Motifs the caller assigned to this region, which may be several for a merged cluster."""
+    raw = variant.INFO.get('MOTIF')
+    return [m for m in str(raw).split(',') if m] if raw else []
+
+
+def _record_provenance(entry: dict, vcf_start: int, vcf_end: int, *, approximate: bool) -> dict:
+    """Where the counted region came from, so a curator can see what was actually measured."""
+    locus_span = entry['end'] - entry['start']
+    overlap = min(vcf_end, entry['end']) - max(vcf_start, entry['start'])
+    return {
+        'approximate': approximate,
+        'record_start': vcf_start,
+        'record_end': vcf_end,
+        'record_span': vcf_end - vcf_start,
+        'record_coverage': round(overlap / locus_span, 3) if locus_span else None,
+    }
+
+
 def scan_vcf(vcf_path: str, entries: list[dict], strchive: dict, sex: str = 'unknown') -> list[dict]:
     """Fetch each disease locus from an indexed VCF, returning results sorted worst-first."""
     results = {}
@@ -371,17 +449,25 @@ def scan_vcf(vcf_path: str, entries: list[dict], strchive: dict, sex: str = 'unk
         locus_id = entry['locus_id']
         meta = strchive[locus_id]
 
-        # Pad the fetch by the tolerance, since LongTR's coordinates do not exactly match
-        # STRchive's; the same fuzzy comparison then filters whatever the index returns.
+        # Fetch anything overlapping the locus. The caller genotypes variation clusters - several
+        # adjacent repeats merged into one region because their boundaries cannot be resolved
+        # separately - so its region can run well past ours in either direction.
         start = max(1, entry['start'] - MATCH_TOLERANCE)
         region = f'{entry["chrom"]}:{start}-{entry["end"] + MATCH_TOLERANCE}'
+        candidates = []
         for variant in vcf(region):
             vcf_start = variant.INFO.get('START') or variant.POS
             vcf_end = variant.INFO.get('END') or vcf_start
-            if not _matches_locus(entry, vcf_start, vcf_end):
-                continue
-            results[locus_id] = _process_vcf_record(variant, entry, meta, vcf_start, vcf_end, sex=sex)
-            break
+            if vcf_start < entry['end'] and vcf_end > entry['start']:
+                candidates.append((variant, vcf_start, vcf_end))
+
+        chosen = _choose_record(entry, candidates)
+        if chosen is None:
+            continue
+        variant, vcf_start, vcf_end, approximate = chosen
+        result = _process_vcf_record(variant, entry, meta, vcf_start, vcf_end, sex=sex)
+        result.update(_record_provenance(entry, vcf_start, vcf_end, approximate=approximate))
+        results[locus_id] = result
 
     vcf.close()
     _add_missing_loci(results, entries, strchive)
@@ -398,7 +484,12 @@ def scan_vcf(vcf_path: str, entries: list[dict], strchive: dict, sex: str = 'unk
 
 def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 'unknown') -> dict:
     """Extract genotype data and classify alleles for a single VCF record."""
-    period = variant.INFO.get('PERIOD') or meta.get('motif_len', 3)
+    # LongTR writes PERIOD=-1 for a region holding motifs of differing lengths, meaning "no
+    # single period applies here". -1 is truthy, so `or` would never reach the fallback and the
+    # sentinel would flow into _parse_allreads, turning every read count negative. We only ever
+    # count our own motif, so the catalog's motif_len is the right value in that case anyway.
+    vcf_period = variant.INFO.get('PERIOD')
+    period = vcf_period if vcf_period and vcf_period > 0 else meta.get('motif_len', 3)
     alt_alleles = list(variant.ALT)
 
     # cyvcf2 gives [allele1, ..., alleleN, phased] - the phase flag is always last, so slice it
@@ -409,10 +500,10 @@ def _process_vcf_record(variant, match, meta, vcf_start, vcf_end, *, sex: str = 
     if len(gt_indices) == 1:
         gt_indices *= 2
 
-    # Shared locus metadata from STRchive + BED, with VCF-specific overrides
+    # Shared locus metadata from STRchive, with VCF-specific overrides. start/end stay as the
+    # catalog's - they identify the disease locus. Where the caller measured a different region
+    # that is carried separately in record_start/record_end, so both are visible on the card.
     base = _build_locus_meta(meta, match)
-    base['start'] = vcf_start
-    base['end'] = vcf_end
     base['period'] = period
 
     ref_seq = variant.REF
@@ -506,6 +597,11 @@ def _add_missing_loci(results: dict, entries: list[dict], strchive: dict) -> Non
                 'filter': '.',
                 'read_alleles': [],
                 'genotyped': False,
+                'approximate': False,
+                'record_start': None,
+                'record_end': None,
+                'record_span': None,
+                'record_coverage': None,
             }
         )
         results[lid] = base
@@ -729,6 +825,11 @@ def build_json_output(
         'evidence',
         'external_links',
         'genotyped',
+        'approximate',
+        'record_start',
+        'record_end',
+        'record_span',
+        'record_coverage',
     )
     return {
         'sample_name': sample_name,

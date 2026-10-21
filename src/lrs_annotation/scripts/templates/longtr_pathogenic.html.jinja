@@ -63,6 +63,11 @@
   .evidence-Limited { background: #6c757d; color: #fff; }
   .evidence-Disputed { background: #fd7e14; color: #fff; }
   .evidence-Refuted { background: #dc3545; color: #fff; }
+  .approx-badge { font-size: 0.65rem; padding: 1px 7px; border-radius: 8px; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: 0.3px;
+                  background: #fff3cd; color: #7a5b00; border: 1px solid #e0c200; cursor: help; }
+  .approx-note { margin-top: 6px; padding: 6px 10px; border-left: 3px solid #e0c200;
+                 background: #fffbf0; font-size: 0.78rem; color: #5c4700; }
 
   .external-links { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
   .external-links a { font-size: 0.72rem; color: #007bff; text-decoration: none; padding: 1px 6px;
@@ -169,6 +174,25 @@
 <details class="glossary">
   <summary>Glossary &amp; external link guide</summary>
   <div class="glossary-content">
+    <div class="glossary-section">
+      <h3>Region matching</h3>
+      <dl>
+        <dt>approximate</dt>
+        <dd>
+          The repeat count was taken over a region whose boundaries differ from the ones STRchive
+          defines for this disease motif. LongTR genotypes the panel's regions, and where several
+          repeats sit close together the panel merges them into one region that can be wider or
+          narrower than the disease repeat alone. The counted region's coordinates are shown on
+          the card so the locus can be checked directly. A wider region can include copies of the
+          motif that are not part of the disease repeat; a narrower one can miss part of it.
+        </dd>
+        <dt>Not genotyped</dt>
+        <dd>
+          No record in the VCF overlapped this locus, so there is nothing to count &mdash; either
+          the caller produced no call here, or the locus is absent from the panel entirely.
+        </dd>
+      </dl>
+    </div>
     <div class="glossary-section">
       <h3>Per-locus metrics</h3>
       <dl>
@@ -339,6 +363,9 @@
       <div class="card-title">
         <strong>{{ r.gene }}</strong> — {{ r.disease }}
         {{ status_badge(r.locus_status) }}
+        {%- if r.approximate %}
+        <span class="approx-badge" title="Counted over a region the caller chose, not the one STRchive defines">approximate</span>
+        {%- endif %}
         {% if r.evidence %}
         <span class="evidence-badge evidence-{{ r.evidence.split(',')[0].strip() }}">{{ r.evidence }}</span>
         {% endif %}
@@ -349,6 +376,14 @@
         {%- if r.inheritance %} · {{ r.inheritance }}{% endif %}
         {%- if r.mechanism %} · {{ r.mechanism }}{% endif %}
       </div>
+      {%- if r.approximate %}
+      <div class="approx-note">
+        Counted over <strong>{{ r.chrom }}:{{ '{:,}'.format(r.record_start) }}–{{ '{:,}'.format(r.record_end) }}</strong>
+        ({{ r.record_span }} bp), not the {{ r.end - r.start }} bp STRchive region above
+        {%- if r.record_coverage is not none %} — covering {{ (r.record_coverage * 100) | round | int }}% of it{% endif %}.
+        Check this locus manually before acting on the count.
+      </div>
+      {%- endif %}
       {% if r.external_links %}
       <div class="external-links">
         {% for link in r.external_links %}

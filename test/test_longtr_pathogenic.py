@@ -14,7 +14,9 @@ from cyvcf2 import VCF, Variant
 from lrs_annotation.scripts.longtr_pathogenic import (
     MATCH_TOLERANCE,
     _add_missing_loci,
+    _choose_record,
     _matches_locus,
+    _motifs_agree,
     _process_vcf_record,
     _summarise_results,
     _threshold_parts,
@@ -213,6 +215,7 @@ VCF_HEADER = [
     '##INFO=<ID=START,Number=1,Type=Integer,Description="Repeat start">',
     '##INFO=<ID=END,Number=1,Type=Integer,Description="Repeat end">',
     '##INFO=<ID=PERIOD,Number=1,Type=Integer,Description="Motif length">',
+    '##INFO=<ID=MOTIF,Number=1,Type=String,Description="Repeat motifs in the region">',
     '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
     '##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Depth">',
     '##contig=<ID=chr1,length=250000000>',
@@ -227,9 +230,9 @@ def _vcf_text(rows: list[str], sample: str = 'TESTSAMPLE') -> str:
     return '\n'.join([*VCF_HEADER, chrom_line, *rows]) + '\n'
 
 
-def _vcf_row(chrom, start, motif, *, n_ref, n_alt, gt) -> str:
-    """Build one VCF data row for a repeat locus spanning 50bp from start."""
-    info = f'START={start};END={start + 50};PERIOD={len(motif)}'
+def _vcf_row(chrom, start, motif, *, n_ref, n_alt, gt, span: int = 50) -> str:
+    """Build one VCF data row for a repeat locus, spanning 50bp from start unless told otherwise."""
+    info = f'START={start};END={start + span};PERIOD={len(motif)};MOTIF={motif}'
     return '\t'.join(
         [chrom, str(start), '.', motif * n_ref, motif * n_alt, '.', 'PASS', info, 'GT:DP', f'{gt}:30'],
     )
@@ -475,24 +478,74 @@ def test_scan_vcf_finds_short_ref_offset_behind_the_catalog_entry(tmp_path, n_re
 
 @needs_htslib
 @pytest.mark.parametrize(
-    ('offset', 'should_match'),
+    ('offset', 'approximate'),
     [
-        (0, True),  # exact
-        (-MATCH_TOLERANCE, True),  # at tolerance, record starts before the catalog entry
-        (MATCH_TOLERANCE, True),  # at tolerance, record starts after
-        (-(MATCH_TOLERANCE + 1), False),  # one past tolerance
-        (MATCH_TOLERANCE + 1, False),  # one past tolerance
+        (0, False),  # exact
+        (-MATCH_TOLERANCE, False),  # at tolerance, record starts before the catalog entry
+        (MATCH_TOLERANCE, False),  # at tolerance, record starts after
+        # Past the tolerance the record is still counted, because the caller genotypes a region
+        # it chose rather than the one the catalog defines - but the count is over a different
+        # span, so it carries the approximation flag.
+        (-(MATCH_TOLERANCE + 1), True),
+        (MATCH_TOLERANCE + 1, True),
     ],
 )
-def test_scan_vcf_tolerates_offset_coordinates(tmp_path, offset, should_match):
-    """LongTR coordinates do not exactly match STRchive's, so matching must survive a shift."""
+def test_scan_vcf_flags_offset_coordinates_as_approximate(tmp_path, offset, approximate):
+    """A record outside the tolerance is counted and flagged, not discarded."""
     entry = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')
     vcf = _write_indexed(
         tmp_path,
         [_vcf_row('chr4', 3074876 + offset, 'CAG', n_ref=HTT_REF_COUNT, n_alt=HTT_ALT_COUNT, gt='0|1')],
     )
     results = scan_vcf(vcf, [entry], {'HD_HTT': HTT}, 'female')
-    assert results[0]['genotyped'] is should_match
+    assert results[0]['genotyped'] is True
+    assert results[0]['approximate'] is approximate
+    assert results[0]['record_start'] == 3074876 + offset
+
+
+def test_choose_record_prefers_the_closest_sized_record(tmp_path):
+    """Two records inside tolerance: take the one whose span matches the catalog, not the first.
+
+    The tolerance is proportionally huge for a short locus, so a 10bp sliver of the tract passes
+    it as readily as the whole 50bp tract. Candidates are offered worst-first here because the
+    index order that produces them carries no meaning.
+    """
+    entry = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')  # spans 3074876-3074926
+    sliver = _variant(tmp_path, 'chr4', 3074896, 'CAG', n_ref=3, n_alt=3, gt='0|0')
+    full = _variant(tmp_path, 'chr4', 3074876, 'CAG', n_ref=HTT_REF_COUNT, n_alt=HTT_ALT_COUNT, gt='0|1')
+
+    chosen = _choose_record(entry, [(sliver, 3074896, 3074906), (full, 3074876, 3074926)])
+
+    assert chosen is not None
+    _variant_obj, start, end, approximate = chosen
+    assert (start, end) == (3074876, 3074926)
+    assert approximate is False
+
+
+@needs_htslib
+def test_scan_vcf_falls_back_to_motif_when_boundaries_disagree(tmp_path):
+    """No record inside tolerance, so the motif picks one and the result is flagged."""
+    entry = _entry_for('chr4', 3074876, 'CAG', 'HD_HTT')  # spans 3074876-3074926
+    matching_motif_start = 3074850
+    # both overlap the locus, both start more than MATCH_TOLERANCE away, so neither is exact.
+    # 'TGC' is a rotation of the reverse complement of CAG - how the panel often spells it.
+    wrong_motif = _vcf_row('chr4', 3074840, 'AAT', n_ref=10, n_alt=10, gt='0|0', span=100)
+    right_motif = _vcf_row('chr4', matching_motif_start, 'TGC', n_ref=12, n_alt=20, gt='0|1', span=60)
+    results = scan_vcf(_write_indexed(tmp_path, [wrong_motif, right_motif]), [entry], {'HD_HTT': HTT}, 'female')
+
+    assert results[0]['approximate'] is True
+    assert results[0]['record_start'] == matching_motif_start
+
+
+def test_motifs_agree_normalises_rotation_strand_and_iupac():
+    """The two catalogs spell the same repeat differently; comparison has to allow for it."""
+    assert _motifs_agree('CGG', 'GCG') is True  # rotation
+    assert _motifs_agree('CGG', 'CCG') is True  # reverse complement
+    assert _motifs_agree('GCN', 'GCG') is True  # IUPAC code against a concrete base
+    assert _motifs_agree('GCN', 'NGC') is True  # IUPAC on both sides
+    assert _motifs_agree('CCG', 'CGA') is False  # genuinely different repeat
+    assert _motifs_agree('TTTTA', 'TTTCA') is False  # one base apart, a different disease motif
+    assert _motifs_agree('CAG', 'CAGCAG') is False  # same sequence, different period
 
 
 @needs_htslib
