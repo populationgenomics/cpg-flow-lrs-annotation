@@ -10,6 +10,10 @@ analysis_type = 'cram'
 # cpu_cores = 1
 # storage_gib = 50
 
+[workflow.resource_overrides.extract_somalier]
+# cpu_cores = 1
+# storage_gib = 50
+
 [images]
 somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
 
