@@ -3,6 +3,12 @@ from cpg_utils.hail_batch import Batch
 
 from lrs_annotation.utils import get_resource_overrides_for_job
 
+# Variant IDs are not unique after merging: IDs are assigned per record before normalisation, so splitting
+# multiallelic sites, left-aligning, and the INS/BND ID formats (which omit length / mate position) all
+# produce distinct records sharing an ID. Downstream steps key on ID (e.g. GATK-SV external AF annotation,
+# seqr docId), so duplicates silently overwrite each other. Append "_<n>" to the 2nd+ occurrence of an ID.
+UNIQUE_ID_AWK = r'BEGIN {FS = OFS = "\t"} /^#/ {print; next} {n = ++seen[$3]; if (n > 1) $3 = $3 "_" n; print}'
+
 
 def merge_svs_vcf_with_bcftools(
     batch: Batch,
@@ -10,7 +16,7 @@ def merge_svs_vcf_with_bcftools(
     job_attrs: dict | None = None,
 ):
     """
-    Naively merge SVs VCFs using bcftools.
+    Naively merge SVs VCFs using bcftools, then make variant IDs unique.
     """
     # Input files
     batch_vcfs = [
@@ -31,10 +37,18 @@ def merge_svs_vcf_with_bcftools(
     #   --write-index: write index file (only for bcftools 1.18+. Occasionally bugged for < 1.21)
     #   +missing2ref: plugin to convert missing genotypes to homozygous reference (0/0)
     #   +fill-tags: plugin to compute and fill in the INFO tags (AF, AN, AC)
+    #   awk: make variant IDs unique (see UNIQUE_ID_AWK)
     merge_job.command(
         f'bcftools merge {" ".join(batch_vcfs)} --threads 4 -m none -0 -Ou | '
         f'bcftools +missing2ref -Ou | '
-        f'bcftools +fill-tags -Oz -o {merge_job.output["vcf.gz"]} --write-index=tbi -- -t AF,AN,AC'
+        f'bcftools +fill-tags -Ov -- -t AF,AN,AC | '
+        f"awk '{UNIQUE_ID_AWK}' | "
+        f'bcftools view -Oz -o {merge_job.output["vcf.gz"]} --write-index=tbi -'
+    )
+    # Fail the job rather than pass on duplicate IDs
+    merge_job.command(
+        f'DUPS=$(bcftools query -f "%ID\\n" {merge_job.output["vcf.gz"]} | sort | uniq -d | wc -l) && '
+        'if [ "$DUPS" -ne 0 ]; then echo "ERROR: $DUPS duplicate variant IDs remain after merge" >&2; exit 1; fi'
     )
 
     return merge_job
